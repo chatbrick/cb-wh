@@ -1,0 +1,4 @@
+aiohttp>=2.3.2
+motor>=1.1
+aiohttp_utils>=3.0.0
+blueforge
