@@ -40,7 +40,7 @@ async def setup_db():
             'fb': CreateFacebookApiClient(access_token=chat['access_token']),
             'chat': json.loads(dumps(chat))
         }
-        chat_data[chat['name']] = formed_chat
+        chat_data[chat['id']] = formed_chat
     logger.debug(chat_data)
     return db, chat_data
 
