@@ -4,6 +4,7 @@ import traceback
 
 from blueforge.apis.facebook import RequestDataFormat, Recipient
 from aiohttp import web
+from chatbrick.brick import find_custom_brick
 
 logger = logging.getLogger('aiohttp.access')
 loop = asyncio.get_event_loop()
@@ -25,6 +26,7 @@ class TempMessage(object):
 
         return data
 
+
 async def facebook_get(request):
     name = request.match_info.get('name', None)
     chat = request.app['chat'].get(name, None)
@@ -38,6 +40,7 @@ async def facebook_get(request):
         if data['hub.verify_token'] == chat['verify_token']:
             return web.Response(text=data['hub.challenge'])
     return web.Response(text='null', status=404)
+
 
 async def facebook_post(request):
     name = request.match_info.get('name', None)
@@ -60,29 +63,33 @@ async def fb_message_poc(chat, fb, data):
             for messaging in entry['messaging']:
                 rep = Recipient(recipient_id=messaging['sender']['id'])
                 if 'postback' in messaging:
-                    await find_brick(fb, chat, rep, 'postback', messaging['postback']['payload'])
+                    await find_brick(fb, chat, messaging, rep, 'postback', messaging['postback']['payload'])
                 elif 'message' in messaging:
                     if 'quick_reply' in messaging['message']:
-                        await find_brick(fb, chat, rep, 'postback', messaging['message']['quick_reply']['payload'])
+                        await find_brick(fb, chat, messaging, rep, 'postback', messaging['message']['quick_reply']['payload'])
                     else:
-                        await find_brick(fb, chat, rep, 'text', messaging['message']['text'])
+                        await find_brick(fb, chat, messaging, rep, 'text', messaging['message']['text'])
 
     except Exception as e:
         traceback.print_exc()
         logger.error(e)
         logger.debug('에러 발생')
 
-async def find_brick(fb, chat, rep, brick_type, value):
-    logger.debug(brick_type)
-    logger.debug(value)
+
+async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value):
+    logger.info(brick_type)
+    logger.info(value)
     await fb.set_typing_on(rep)
     for brick in chat['bricks']:
         if brick['type'] == brick_type and brick['value'] == value:
             for send_action in brick['actions']:
-                logger.info(await fb.send_message(TempMessage(recipient=rep, message=send_action['message'])))
+                logger.info(send_action)
+                if 'message' in send_action:
+                    logger.info(await fb.send_message(TempMessage(recipient=rep, message=send_action['message'])))
+                elif 'brick' in send_action:
+                    logger.info(find_custom_brick(fb=fb, platform='facebook', brick_id=send_action['brick']['id'],
+                                                        raw_data=send_action['brick'], msg_data=raw_msg_data))
             break
 
     await fb.set_mark_seen(rep)
     await fb.set_typing_off(rep)
-
-

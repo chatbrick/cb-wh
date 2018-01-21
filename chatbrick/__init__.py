@@ -15,6 +15,23 @@ logger = logging.getLogger('aiohttp.access')
 logging.basicConfig(level=logging.DEBUG)
 
 
+class CreateTelegramApiClient(object):
+    def __init__(self, token):
+        self.token = token
+
+    async def send_message(self, method, message):
+        req = requests.post(url='https://api.telegram.org/bot%s/%s' % (self.token, method),
+                            data=json.dumps(message),
+                            headers={'Content-Type': 'application/json'},
+                            timeout=5)
+
+        return req.json()
+
+    @property
+    def get_token(self):
+        return self.token
+
+
 async def send_message_profile(access_token, send_message):
     logger.debug(send_message)
     res = requests.post(url='https://graph.facebook.com/v2.6/me/messenger_profile?access_token=%s' % access_token,
@@ -40,6 +57,11 @@ async def setup_db():
             'fb': CreateFacebookApiClient(access_token=chat['access_token']),
             'chat': json.loads(dumps(chat))
         }
+
+        if chat.get('telegram', False):
+            if chat.get('telegram').get('token', False):
+                formed_chat['tg'] = CreateTelegramApiClient(chat['telegram']['token'])
+
         chat_data[chat['id']] = formed_chat
     logger.debug(chat_data)
     return db, chat_data
