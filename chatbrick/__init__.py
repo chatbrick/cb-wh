@@ -9,7 +9,6 @@ from blueforge.apis.facebook import CreateFacebookApiClient
 from bson.json_util import dumps
 from aiohttp import web
 from chatbrick.routes import setup_routes
-from bson.objectid import ObjectId
 
 logger = logging.getLogger('aiohttp.access')
 logging.basicConfig(level=logging.DEBUG)
@@ -44,9 +43,12 @@ async def send_message_profile(access_token, send_message):
 async def setup_db():
     db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
     chats = await db.facebook.find({}).to_list(length=1000)
+    page_data = {}
     chat_data = {}
 
     for chat in chats:
+        if chat['page_id']:
+            page_data[chat['page_id']] = chat['id']
 
         for menu in chat['persistent_menu']:
             await send_message_profile(chat['access_token'], {'whitelisted_domains': menu['whitelisted_domains']})
@@ -63,13 +65,13 @@ async def setup_db():
                 formed_chat['tg'] = CreateTelegramApiClient(chat['telegram']['token'])
 
         chat_data[chat['id']] = formed_chat
-    logger.debug(chat_data)
-    return db, chat_data
+    logger.info(page_data)
+    return db, chat_data, page_data
 
 
 loop = asyncio.get_event_loop()
 
 db = loop.run_until_complete(setup_db())
 app = web.Application()
-app['db'], app['chat'] = db
+app['db'], app['chat'], app['page'] = db
 setup_routes(app)

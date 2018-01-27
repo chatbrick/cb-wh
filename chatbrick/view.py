@@ -26,49 +26,61 @@ class TempMessage(object):
 
         return data
 
+#
+# async def facebook_post(request):
+#     name = request.match_info.get('name', None)
+#     chat_data = request.app['chat'].get(name, None)
+#     if chat_data is None:
+#         return web.Response(text='null', status=404)
+#
+#     chat = chat_data['chat']
+#     fb = chat_data['fb']
+#     data = await request.json()
+#     logger.info(data)
+#     request.app.loop.create_task(fb_message_poc(chat, fb, data))
+#
+#     return web.Response(text='Hello World')
+
 
 async def facebook_get(request):
-    name = request.match_info.get('name', None)
-    chat = request.app['chat'].get(name, None)
     data = request.query
-    logger.debug(chat)
-    if data and chat:
-        chat = chat['chat']
-        logger.info(data['hub.verify_token'])
-        logger.info(chat['verify_token'])
 
-        if data['hub.verify_token'] == chat['verify_token']:
-            return web.Response(text=data['hub.challenge'])
+    if data['hub.verify_token'] == 'this_is_for_chat_brick_application':
+        return web.Response(text=data['hub.challenge'])
+
     return web.Response(text='null', status=404)
 
 
 async def facebook_post(request):
-    name = request.match_info.get('name', None)
-    chat_data = request.app['chat'].get(name, None)
-    if chat_data is None:
-        return web.Response(text='null', status=404)
-
-    chat = chat_data['chat']
-    fb = chat_data['fb']
     data = await request.json()
-    logger.info(data)
-    request.app.loop.create_task(fb_message_poc(chat, fb, data))
+    try:
 
+        for entry in data['entry']:
+            bot_id = request.app['page'].get(entry['id'], None)
+            chat_data = request.app['chat'].get(bot_id, None)
+
+            if chat_data is None:
+                return web.Response(text='null', status=200)
+
+            request.app.loop.create_task(fb_message_poc(chat_data['chat'], chat_data['fb'], entry))
+    except Exception as e:
+        logger.error(e)
+
+    logger.info(data)
     return web.Response(text='Hello World')
 
 
-async def fb_message_poc(chat, fb, data):
+async def fb_message_poc(chat, fb, entry):
     try:
-        for entry in data['entry']:
-            for messaging in entry['messaging']:
-                rep = Recipient(recipient_id=messaging['sender']['id'])
-                if 'postback' in messaging:
-                    await find_brick(fb, chat, messaging, rep, 'postback', messaging['postback']['payload'])
-                elif 'message' in messaging:
-                    if 'quick_reply' in messaging['message']:
-                        await find_brick(fb, chat, messaging, rep, 'postback', messaging['message']['quick_reply']['payload'])
-                    else:
-                        await find_brick(fb, chat, messaging, rep, 'text', messaging['message']['text'])
+        for messaging in entry['messaging']:
+            rep = Recipient(recipient_id=messaging['sender']['id'])
+            if 'postback' in messaging:
+                await find_brick(fb, chat, messaging, rep, 'postback', messaging['postback']['payload'])
+            elif 'message' in messaging:
+                if 'quick_reply' in messaging['message']:
+                    await find_brick(fb, chat, messaging, rep, 'postback', messaging['message']['quick_reply']['payload'])
+                else:
+                    await find_brick(fb, chat, messaging, rep, 'text', messaging['message']['text'])
 
     except Exception as e:
         traceback.print_exc()
@@ -87,7 +99,7 @@ async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value):
                 if 'message' in send_action:
                     logger.info(await fb.send_message(TempMessage(recipient=rep, message=send_action['message'])))
                 elif 'brick' in send_action:
-                    logger.info(find_custom_brick(fb=fb, platform='facebook', brick_id=send_action['brick']['id'],
+                    logger.info(find_custom_brick(client=fb, platform='facebook', brick_id=send_action['brick']['id'],
                                                         raw_data=send_action['brick'], msg_data=raw_msg_data))
             break
 
