@@ -54,11 +54,9 @@ async def facebook_get(request):
 async def facebook_post(request):
     data = await request.json()
     try:
-
         for entry in data['entry']:
             bot_id = request.app['page'].get(entry['id'], None)
             chat_data = request.app['chat'].get(bot_id, None)
-
             if chat_data is None:
                 return web.Response(text='null', status=200)
 

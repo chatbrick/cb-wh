@@ -47,25 +47,26 @@ async def setup_db():
     chat_data = {}
 
     for chat in chats:
-        if chat['page_id']:
-            page_data[chat['page_id']] = chat['id']
-
-        for menu in chat['persistent_menu']:
-            await send_message_profile(chat['access_token'], {'whitelisted_domains': menu['whitelisted_domains']})
-
-        await send_message_profile(chat['access_token'], chat['persistent_menu'][0])
-
         formed_chat = {
-            'fb': CreateFacebookApiClient(access_token=chat['access_token']),
             'chat': json.loads(dumps(chat))
         }
+
+        if chat.get('page_id', False):
+            page_data[chat['page_id']] = chat['id']
+
+        if chat.get('access_token', False):
+            for menu in chat['persistent_menu']:
+                await send_message_profile(chat['access_token'], {'whitelisted_domains': menu['whitelisted_domains']})
+
+            await send_message_profile(chat['access_token'], chat['persistent_menu'][0])
+
+            formed_chat['fb'] = CreateFacebookApiClient(access_token=chat['access_token'])
 
         if chat.get('telegram', False):
             if chat.get('telegram').get('token', False):
                 formed_chat['tg'] = CreateTelegramApiClient(chat['telegram']['token'])
 
         chat_data[chat['id']] = formed_chat
-    logger.info(page_data)
     return db, chat_data, page_data
 
 
