@@ -1,6 +1,10 @@
 import logging
 import asyncio
 import traceback
+import datetime
+import dateutil.parser
+import motor.motor_asyncio
+import os
 
 from blueforge.apis.facebook import RequestDataFormat, Recipient
 from aiohttp import web
@@ -25,21 +29,6 @@ class TempMessage(object):
             data['message'] = self.message
 
         return data
-
-#
-# async def facebook_post(request):
-#     name = request.match_info.get('name', None)
-#     chat_data = request.app['chat'].get(name, None)
-#     if chat_data is None:
-#         return web.Response(text='null', status=404)
-#
-#     chat = chat_data['chat']
-#     fb = chat_data['fb']
-#     data = await request.json()
-#     logger.info(data)
-#     request.app.loop.create_task(fb_message_poc(chat, fb, data))
-#
-#     return web.Response(text='Hello World')
 
 
 async def facebook_get(request):
@@ -76,9 +65,35 @@ async def fb_message_poc(chat, fb, entry):
                 await find_brick(fb, chat, messaging, rep, 'postback', messaging['postback']['payload'])
             elif 'message' in messaging:
                 if 'quick_reply' in messaging['message']:
-                    await find_brick(fb, chat, messaging, rep, 'postback', messaging['message']['quick_reply']['payload'])
-                else:
-                    await find_brick(fb, chat, messaging, rep, 'text', messaging['message']['text'])
+                    await find_brick(fb, chat, messaging, rep, 'postback',
+                                     messaging['message']['quick_reply']['payload'])
+                elif 'text' in messaging['message']:
+
+                    db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
+                    text_input = await db.message_store.find_one({"id": rep.recipient_id})
+                    if text_input:
+                        store_len = len(text_input['store'])
+                        is_final = False
+                        final_store_idx = None
+                        for idx, store in enumerate(text_input['store']):
+
+                            if store['value'] == '':
+                                logger.info(db.message_store.update_one({'_id': text_input['_id']}, {
+                                    '$set': {'store.%d.value' % idx: messaging['message']['text']}}))
+
+                                if idx == store_len:
+                                    is_final = True
+                                else:
+                                    final_store_idx = idx
+                                    break
+
+                        if is_final:
+                            await find_brick(fb, chat, messaging, rep, 'brick', messaging['message']['text'])
+                        else:
+                            await fb.send_message(TempMessage(recipient=rep, message={
+                                "text": text_input['store'][final_store_idx]['text']
+                            }))
+                            # await find_brick(fb, chat, messaging, rep, 'text', messaging['message']['text'])
 
     except Exception as e:
         traceback.print_exc()
@@ -92,13 +107,31 @@ async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value):
     await fb.set_typing_on(rep)
     for brick in chat['bricks']:
         if brick['type'] == brick_type and brick['value'] == value:
+            is_pass = False
+            if brick.get('conditions', False) and len(brick['conditions']):
+                for brick_condition in brick['conditions']:
+                    now = int(datetime.datetime.now().timestamp())
+                    if brick_condition['type'] == 'date_between':
+                        start = int(dateutil.parser.parse(brick_condition['data']['start_date']).timestamp())
+                        end = int(dateutil.parser.parse(brick_condition['data']['end_data']).timestamp())
+                        if now < start or now > end:
+                            is_pass = True
+                    elif brick_condition['type'] == 'date_not_between':
+                        start = int(dateutil.parser.parse(brick_condition['data']['start_date']).timestamp())
+                        end = int(dateutil.parser.parse(brick_condition['data']['end_data']).timestamp())
+                        if start <= now <= end:
+                            is_pass = True
+
+            if is_pass:
+                continue
+
             for send_action in brick['actions']:
                 logger.info(send_action)
                 if 'message' in send_action:
                     logger.info(await fb.send_message(TempMessage(recipient=rep, message=send_action['message'])))
                 elif 'brick' in send_action:
                     logger.info(find_custom_brick(client=fb, platform='facebook', brick_id=send_action['brick']['id'],
-                                                        raw_data=send_action['brick'], msg_data=raw_msg_data))
+                                                  raw_data=send_action['brick'], msg_data=raw_msg_data))
             break
 
     await fb.set_mark_seen(rep)

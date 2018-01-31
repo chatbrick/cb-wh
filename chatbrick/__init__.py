@@ -41,6 +41,7 @@ async def send_message_profile(access_token, send_message):
 
 
 async def setup_db():
+
     db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
     chats = await db.facebook.find({}).to_list(length=1000)
     page_data = {}
