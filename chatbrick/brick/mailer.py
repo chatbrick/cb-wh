@@ -92,6 +92,7 @@ class Mailer(object):
                         ]
                     )
                 ))
+            await self.brick_db.delete()
 
         return None
 

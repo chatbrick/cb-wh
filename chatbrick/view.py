@@ -81,19 +81,21 @@ async def fb_message_poc(chat, fb, entry):
                     db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
                     text_input = await db.message_store.find_one({'id': rep.recipient_id,
                                                                   'platform': 'facebook'})
+                    logger.info('text_input')
+                    logger.info(text_input)
                     if text_input:
                         is_final = False
                         final_store_idx = None
                         store_len = len(text_input['store'])
+                        logger.info(store_len)
                         for idx, store in enumerate(text_input['store']):
-
                             if store['value'] == '':
                                 logger.info(db.message_store.update_one({'_id': text_input['_id']}, {
                                     '$set': {'store.%d.value' % idx: messaging['message']['text']}}))
 
                                 logger.info(idx)
                                 logger.info(store_len)
-                                if (idx + 1) == store_len:
+                                if store_len == 1 or ((idx + 1) == store_len):
                                     is_final = True
                                 else:
                                     final_store_idx = idx + 1
@@ -105,8 +107,7 @@ async def fb_message_poc(chat, fb, entry):
                             await find_brick(fb, chat, messaging, rep, 'brick', text_input['brick_id'])
                         else:
                             await fb.send_message(RequestDataFormat(recipient=rep,
-                                                                    message=text_input['store'][final_store_idx][
-                                                                        'message'], message_type='RESPONSE'))
+                                                                    message=text_input['store'][final_store_idx]['message'], message_type='RESPONSE'))
                     else:
                         await find_brick(fb, chat, messaging, rep, 'text',
                                          messaging['message']['text'])

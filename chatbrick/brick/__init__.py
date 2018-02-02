@@ -4,6 +4,7 @@ import os
 
 from chatbrick.brick.send_email import SendEmail
 from chatbrick.brick.mailer import Mailer
+from chatbrick.brick.lotto import Lotto
 from blueforge.apis.facebook import Recipient, RequestDataFormat, Message
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ class BrickInputMessage(object):
             'store': []
         }
         brick_data = await self.db.brick.find_one({'id': self.brick_data['id']})
-        for idx, u_input in enumerate(brick_data.get('user_input', False)):
+        for idx, u_input in enumerate(brick_data.get('user_input', [])):
             input_data['store'].append({
                 'message': u_input['message'],
                 'key': u_input['key'],
@@ -61,7 +62,6 @@ class BrickInputMessage(object):
 
     async def delete(self):
         await self.db.message_store.delete_many({'id': self.rep.recipient_id,
-                                                 'brick_id': self.brick_data['id'],
                                                  'platform': 'facebook'})
 
 
@@ -74,6 +74,13 @@ async def find_custom_brick(client, platform, brick_id, command, brick_data, msg
         if brick_id == 'send_email':
             email = SendEmail(receiver_email=brick_config['receiver_email'], title=brick_config['title'])
             return email.facebook(fb_token=client.access_token, psid=msg_data['sender']['id'])
+        elif brick_id == 'lotto':
+            lotto = Lotto(
+                fb=fb,
+                brick_db=brick_input
+            )
+
+            return await lotto.facebook(command)
         elif brick_id == 'mailer':
             mailer = Mailer(
                 fb=fb,
