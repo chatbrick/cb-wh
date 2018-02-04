@@ -5,13 +5,34 @@ import datetime
 import dateutil.parser
 import motor.motor_asyncio
 import os
+import json
+import requests
 
+from bson.json_util import dumps
 from blueforge.apis.facebook import RequestDataFormat, Recipient
 from aiohttp import web
 from chatbrick.brick import find_custom_brick
+from blueforge.apis.facebook import CreateFacebookApiClient
 
 logger = logging.getLogger('aiohttp.access')
 loop = asyncio.get_event_loop()
+
+
+class CreateTelegramApiClient(object):
+    def __init__(self, token):
+        self.token = token
+
+    async def send_message(self, method, message):
+        req = requests.post(url='https://api.telegram.org/bot%s/%s' % (self.token, method),
+                            data=json.dumps(message),
+                            headers={'Content-Type': 'application/json'},
+                            timeout=5)
+
+        return req.json()
+
+    @property
+    def get_token(self):
+        return self.token
 
 
 class TempMessage(object):
@@ -38,6 +59,34 @@ def brick_payload(payload):
         'brick_id': temp[1],
         'command': temp[2]
     }
+
+async def refresh_post(request):
+    name = request.match_info.get('name', None)
+    if name:
+        db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
+        chat = await db.facebook.find_one({'id': name})
+        logger.info(chat)
+
+        if chat:
+            formed_chat = {
+                'chat': json.loads(dumps(chat))
+            }
+
+            if chat.get('page_id', False):
+                request.app['page'][chat['page_id']] = chat['id']
+
+            if chat.get('access_token', False):
+                formed_chat['fb'] = CreateFacebookApiClient(access_token=chat['access_token'])
+
+            if chat.get('telegram', False):
+                if chat.get('telegram').get('token', False):
+                    formed_chat['tg'] = CreateTelegramApiClient(chat['telegram']['token'])
+
+        request.app['chat'][name] = formed_chat
+        logger.info(request.app['chat'])
+        return web.Response(text='Hello World')
+
+    return web.Response(text='null', status=404)
 
 
 async def facebook_get(request):

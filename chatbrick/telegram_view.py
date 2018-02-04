@@ -1,4 +1,6 @@
 import logging
+import motor.motor_asyncio
+import os
 
 from aiohttp import web
 from chatbrick.brick import find_custom_brick
@@ -7,12 +9,21 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-def brick_payload(payload):
+def update_payload(payload):
     temp = payload.split(sep='|')
     return {
         'command': temp[0],
         'value': temp[1],
         'seq': temp[2]
+    }
+
+
+def brick_payload(payload):
+    temp = payload.split(sep='|')
+    return {
+        'command': temp[0],
+        'brick': temp[1],
+        'sub_command': temp[2]
     }
 
 
@@ -39,18 +50,58 @@ async def telegram_post(request):
 async def tg_message_poc(tg, chat, data):
     commands = {}
     if 'message' in data:
+        message = data['message']
+        is_go = True
+
         if 'entities' in data['message']:
-            message = data['message']
             if message['entities'][0]['type'] == 'bot_command':
+                is_go = False
                 command = message['text'][1:message['entities'][0]['length']]
                 commands['value'] = command
                 logger.info('Command: %s' % command)
                 await find_brick(tg, chat, message, 'bot_command', **commands)
+
+        if 'text' in data['message'] and is_go:
+            logger.info('only text')
+            db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
+            text_input = await db.message_store.find_one({'id': message['from']['id'],
+                                                          'platform': 'telegram'})
+            logger.info('text_input')
+            logger.info(text_input)
+            if text_input:
+                is_final = False
+                final_store_idx = None
+                store_len = len(text_input['store'])
+                logger.info(store_len)
+                for idx, store in enumerate(text_input['store']):
+                    if store['value'] == '':
+                        logger.info(db.message_store.update_one({'_id': text_input['_id']}, {
+                            '$set': {'store.%d.value' % idx: data['message']['text']}}))
+
+                        logger.info(idx)
+                        logger.info(store_len)
+                        if store_len == 1 or ((idx + 1) == store_len):
+                            is_final = True
+                        else:
+                            final_store_idx = idx + 1
+                            logger.info(final_store_idx)
+                            break
+
+                if is_final:
+                    await find_brick(tg, chat, message, None, brick=text_input['brick_id'], sub_command='final')
+                else:
+                    action_message = text_input['store'][final_store_idx]['message']['message']
+                    action_message['chat_id'] = message['from']['id']
+                    logger.info(await tg.send_message(text_input['store'][final_store_idx]['message']['method'],
+                                                      action_message))
+
     elif 'callback_query' in data:
         callback = data['callback_query']
         command = callback['data']
         logger.info('Command: %s' % command)
         if command.startswith('EDIT|'):
+            commands = update_payload(command)
+        elif command.startswith('BRICK|'):
             commands = brick_payload(command)
         else:
             commands['value'] = command
@@ -61,20 +112,28 @@ async def tg_message_poc(tg, chat, data):
 async def find_brick(tg, chat, raw_message, brick_type, **kwargs):
     logger.info(brick_type)
     logger.info(kwargs)
-    for brick in chat:
-        if brick['type'] == brick_type and brick['value'] == kwargs['value']:
-            if kwargs.get('seq', False):
-                action = brick['edits'][int(kwargs['seq'])]
-                send_message = action['message']
-                send_message['chat_id'] = raw_message['from']['id']
-                send_message['message_id'] = raw_message['message']['message_id']
-                logger.info(await tg.send_message(action['method'], send_message))
-            else:
-                for action in brick['actions']:
-                    if 'message' in action:
-                        send_message = action['message']
-                        send_message['chat_id'] = raw_message['from']['id']
-                        logger.info(await tg.send_message(action['method'], send_message))
-                    elif 'brick' in action:
-                        logger.info(find_custom_brick(client=tg, platform='telegram', brick_id=action['brick']['id'],
-                                                      raw_data=action['brick'], msg_data=raw_message))
+    if 'brick' in kwargs:
+        await find_custom_brick(client=tg, platform='telegram', brick_id=kwargs['brick'],
+                                command=kwargs['sub_command'], brick_data={'id': kwargs['brick']},
+                                msg_data=raw_message)
+    else:
+        for brick in chat:
+            if brick['type'] == brick_type and brick['value'] == kwargs['value']:
+                if kwargs.get('seq', False):
+                    action = brick['edits'][int(kwargs['seq'])]
+                    send_message = action['message']
+                    send_message['chat_id'] = raw_message['from']['id']
+                    send_message['message_id'] = raw_message['message']['message_id']
+                    logger.info(await tg.send_message(action['method'], send_message))
+                else:
+                    for action in brick['actions']:
+                        if 'message' in action:
+                            send_message = action['message']
+                            send_message['chat_id'] = raw_message['from']['id']
+                            logger.info(await tg.send_message(action['method'], send_message))
+                        elif 'brick' in action:
+                            logger.info(
+                                await find_custom_brick(client=tg, platform='telegram',
+                                                        brick_id=action['brick']['id'],
+                                                        command='get_started', brick_data=action['brick'],
+                                                        msg_data=raw_message))

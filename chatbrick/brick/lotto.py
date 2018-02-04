@@ -1,6 +1,7 @@
 import requests
 import logging
 import os
+import blueforge.apis.telegram as tg
 
 from blueforge.apis.facebook import Message, GenericTemplate, TemplateAttachment, ImageAttachment, PostBackButton, \
     Element, QuickReply, QuickReplyTextItem
@@ -57,6 +58,40 @@ class Lotto(object):
 
         return None
 
-    def telegram(self, sender):
+    async def telegram(self, command):
+        if command == 'get_started':
+            send_message = [
+                tg.SendPhoto(
+                    photo=BRICK_DEFAULT_IMAGE[0]
+                ),
+                tg.SendMessage(
+                    text='(주)나눔로또에서 제공하는 "로또당첨번호 서비스"에요.'
+                )
 
+            ]
+            await self.fb.send_messages(send_message)
+            await self.brick_db.save()
+        elif command == 'final':
+            input_data = await self.brick_db.get()
+            num = input_data['store'][0]['value']
+
+            res = requests.get(url='http://www.nlotto.co.kr/common.do?method=getLottoNumber&drwNo=%s' % num)
+            parsed_result = res.json()
+
+            await self.brick_db.delete()
+            await self.fb.send_message(
+                tg.SendMessage(
+                    text='두구두구두구 ~\n조회하신 {drwNo}회 당첨번호는 {drwtNo1},{drwtNo2},{drwtNo3},{drwtNo4},{drwtNo5},{drwtNo6} 에 보너스번호는 {bnusNo} 이에요.\n부디 1등이길!!'.format(
+                        **parsed_result),
+                    reply_markup=tg.MarkUpContainer(
+                        inline_keyboard=[
+                            [
+                                tg.CallbackButton(
+                                    text='다른회차검색',
+                                    callback_data='BRICK|mailer|get_started'
+                                )
+                            ]
+                        ]
+                    )
+                ))
         return None
