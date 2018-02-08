@@ -1,18 +1,12 @@
-import requests
 import logging
-import os
-import blueforge.apis.telegram as tg
 
-from blueforge.apis.facebook import Message, GenericTemplate, TemplateAttachment, ImageAttachment, PostBackButton, \
-    Element, QuickReply, QuickReplyTextItem
-from email.mime.text import MIMEText
+import blueforge.apis.telegram as tg
+import requests
+from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
 
 logger = logging.getLogger(__name__)
 
-BRICK_DEFAULT_IMAGE = [
-    'https://www.chatbrick.io/api/static/img_brick_02_slide.png',
-    'https://www.chatbrick.io/api/static/img_brick_01_slide.png'
-]
+BRICK_DEFAULT_IMAGE = 'https://www.chatbrick.io/api/static/brick/img_brick_04_001.png'
 
 
 class Lotto(object):
@@ -25,7 +19,7 @@ class Lotto(object):
             send_message = [
                 Message(
                     attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE[0]
+                        url=BRICK_DEFAULT_IMAGE
                     )
                 ),
                 Message(
@@ -62,7 +56,7 @@ class Lotto(object):
         if command == 'get_started':
             send_message = [
                 tg.SendPhoto(
-                    photo=BRICK_DEFAULT_IMAGE[0]
+                    photo=BRICK_DEFAULT_IMAGE
                 ),
                 tg.SendMessage(
                     text='(주)나눔로또에서 제공하는 "로또당첨번호 서비스"에요.'
@@ -88,7 +82,7 @@ class Lotto(object):
                             [
                                 tg.CallbackButton(
                                     text='다른회차검색',
-                                    callback_data='BRICK|mailer|get_started'
+                                    callback_data='BRICK|lotto|get_started'
                                 )
                             ]
                         ]

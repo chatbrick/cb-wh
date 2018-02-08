@@ -1,11 +1,15 @@
 import logging
-import motor.motor_asyncio
 import os
 
-from chatbrick.brick.send_email import SendEmail
-from chatbrick.brick.mailer import Mailer
-from chatbrick.brick.lotto import Lotto
-from blueforge.apis.facebook import Recipient, RequestDataFormat, Message
+import motor.motor_asyncio
+from blueforge.apis.facebook import Recipient, RequestDataFormat
+
+from .emergency import Emergency
+from .holiday import Holiday
+from .lotto import Lotto
+from .luck import Luck
+from .mailer import Mailer
+from .send_email import SendEmail
 
 logger = logging.getLogger(__name__)
 
@@ -33,19 +37,23 @@ class BrickTelegramAPIClient(object):
             if type(message) is not dict:
                 dict_message = message.get_data()
                 dict_message['chat_id'] = self.rep
+                await self.tg.send_action(message.get_method(), self.rep)
                 await self.tg.send_message(message.get_method(), dict_message)
 
             else:
                 message['message']['chat_id'] = self.rep
+                await self.tg.send_action(message.get_method(), self.rep)
                 await self.tg.send_message(message['method'], message['message'])
 
     async def send_message(self, message):
         if type(message) is not dict:
             dict_message = message.get_data()
             dict_message['chat_id'] = self.rep
+            await self.tg.send_action(message.get_method(), self.rep)
             await self.tg.send_message(message.get_method(), dict_message)
         else:
             message['message']['chat_id'] = self.rep
+            await self.tg.send_action(message['method'], self.rep)
             await self.tg.send_message(message['method'], message['message'])
 
 
@@ -61,7 +69,7 @@ class BrickInputMessage(object):
         else:
             self.rep = rep
 
-    async def save(self):
+    async def save(self, is_pass=False):
         await self.delete()
         input_data = {
             'brick_id': self.brick_data['id'],
@@ -70,33 +78,57 @@ class BrickInputMessage(object):
             'platform': self.platform,
             'store': []
         }
+        logger.info('Very Important things::')
+        logger.info(input_data)
 
         if self.platform == 'facebook':
             brick_data = await self.db.brick.find_one({'id': self.brick_data['id']})
             for idx, u_input in enumerate(brick_data.get('user_input', [])):
-                input_data['store'].append({
-                    'message': u_input['message'],
-                    'key': u_input['key'],
-                    'value': ''
-                })
+                if is_pass:
+                    input_data['store'].append({
+                        'message': u_input['message'],
+                        'key': u_input['key'],
+                        'value': 'pass'
+                    })
+                else:
+                    input_data['store'].append({
+                        'message': u_input['message'],
+                        'key': u_input['key'],
+                        'value': ''
+                    })
 
-                if idx == 0:
+                if idx == 0 and is_pass is False:
                     await self.fb.send_message(u_input['message'])
 
             logger.info(await self.db.message_store.insert_one(input_data))
         elif self.platform == 'telegram':
             brick_data = await self.db.brick.find_one({'id': self.brick_data['id']})
             for idx, u_input in enumerate(brick_data.get('user_input', [])):
-                input_data['store'].append({
-                    'message': u_input['tg_message'],
-                    'key': u_input['key'],
-                    'value': ''
-                })
+                if is_pass:
+                    input_data['store'].append({
+                        'message': u_input['tg_message'],
+                        'key': u_input['key'],
+                        'value': 'pass'
+                    })
+                else:
+                    input_data['store'].append({
+                        'message': u_input['tg_message'],
+                        'key': u_input['key'],
+                        'value': ''
+                    })
 
-                if idx == 0:
+                if idx == 0 and is_pass is False:
                     await self.fb.send_message(u_input['tg_message'])
 
             logger.info(await self.db.message_store.insert_one(input_data))
+
+    async def update(self, set_data):
+        rslt_data = await self.db.message_store.update_one({
+            'brick_id': self.brick_data['id'],
+            'id': self.rep,
+            'platform': self.platform
+        }, set_data)
+        return rslt_data
 
     async def get(self):
         message_data = await self.db.message_store.find_one({
@@ -111,9 +143,13 @@ class BrickInputMessage(object):
                                                  'platform': self.platform})
 
 
-async def find_custom_brick(client, platform, brick_id, command, brick_data, msg_data):
-    brick_config = brick_data.get('data', [])
+async def find_custom_brick(client, platform, brick_id, command, brick_data, msg_data, brick_config):
+    if brick_config is not None:
+        if brick_config.get(brick_id, False):
+            brick_data['data'] = brick_config[brick_id]
 
+    logger.info('find_custom_brick/brick_config')
+    logger.info(brick_config)
     if platform == 'facebook':
         fb = BrickFacebookAPIClient(fb=client, rep=Recipient(recipient_id=msg_data['sender']['id']))
         brick_input = BrickInputMessage(fb=fb, platform=platform, rep=fb.rep, brick_data=brick_data)
@@ -132,8 +168,26 @@ async def find_custom_brick(client, platform, brick_id, command, brick_data, msg
                 fb=fb,
                 brick_db=brick_input
             )
-
             return await mailer.facebook(command)
+        elif brick_id == 'luck':
+            luck = Luck(
+                fb=fb,
+                brick_db=brick_input
+            )
+            return await luck.facebook(command)
+        elif brick_id == 'emergency':
+            emergency = Emergency(
+                fb=fb,
+                brick_db=brick_input
+            )
+            return await emergency.facebook(command)
+        elif brick_id == 'holiday':
+            holiday = Holiday(
+                fb=fb,
+                brick_db=brick_input
+            )
+            return await holiday.facebook(command)
+
     elif platform == 'telegram':
         tg = BrickTelegramAPIClient(tg=client, rep=msg_data['from']['id'])
         brick_input = BrickInputMessage(fb=tg, platform=platform, rep=tg.rep, brick_data=brick_data)
@@ -152,5 +206,23 @@ async def find_custom_brick(client, platform, brick_id, command, brick_data, msg
                 fb=tg,
                 brick_db=brick_input
             )
-
             return await mailer.telegram(command)
+
+        elif brick_id == 'luck':
+            luck = Luck(
+                fb=tg,
+                brick_db=brick_input
+            )
+            return await luck.telegram(command)
+        elif brick_id == 'emergency':
+            emergency = Emergency(
+                fb=tg,
+                brick_db=brick_input
+            )
+            return await emergency.telegram(command)
+        elif brick_id == 'holiday':
+            holiday = Holiday(
+                fb=tg,
+                brick_db=brick_input
+            )
+            return await holiday.telegram(command)

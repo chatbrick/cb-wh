@@ -1,20 +1,17 @@
-import requests
 import smtplib
 import logging
 import os
-import blueforge.apis.telegram as tg
+import smtplib
+from email.mime.text import MIMEText
 
+import blueforge.apis.telegram as tg
 from blueforge.apis.facebook import Message, GenericTemplate, TemplateAttachment, ImageAttachment, PostBackButton, \
     Element, QuickReply, QuickReplyTextItem
-from email.mime.text import MIMEText
 
 logger = logging.getLogger(__name__)
 
-BRICK_DEFAULT_IMAGE = [
-    'https://www.chatbrick.io/api/static/img_brick_02_slide.png',
-    'https://www.chatbrick.io/api/static/img_brick_01_slide.png'
-]
-
+BRICK_DEFAULT_IMAGE = 'https://www.chatbrick.io/api/static/brick/img_brick_03_001.png'
+BRICK_GENERIC_TEMPLATE_IMAGE = 'https://www.chatbrick.io/api/static/brick/img_brick_03_002.png'
 
 class Mailer(object):
     def __init__(self, fb, brick_db):
@@ -32,7 +29,7 @@ class Mailer(object):
             send_message = [
                 Message(
                     attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE[1]
+                        url=BRICK_DEFAULT_IMAGE
                     )
                 ),
                 Message(
@@ -44,6 +41,7 @@ class Mailer(object):
                             elements=[
                                 Element(title='메일전송',
                                         subtitle='챗봇에서 메일을 보낼 수 있어요',
+                                        image_url=BRICK_GENERIC_TEMPLATE_IMAGE,
                                         buttons=[
                                             PostBackButton(
                                                 title='메일보내기',
@@ -101,7 +99,7 @@ class Mailer(object):
         if command == 'get_started':
             send_message = [
                 tg.SendPhoto(
-                    photo=BRICK_DEFAULT_IMAGE[0]
+                    photo=BRICK_DEFAULT_IMAGE
                 ),
                 tg.SendMessage(
                     text='블루핵에서 제공하는 "메일보내기 서비스"예요.',

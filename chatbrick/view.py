@@ -14,8 +14,18 @@ from aiohttp import web
 from chatbrick.brick import find_custom_brick
 from blueforge.apis.facebook import CreateFacebookApiClient
 
+
 logger = logging.getLogger('aiohttp.access')
 loop = asyncio.get_event_loop()
+
+
+async def send_message_profile(access_token, send_message):
+    logger.debug(send_message)
+    res = requests.post(url='https://graph.facebook.com/v2.6/me/messenger_profile?access_token=%s' % access_token,
+                        data=json.dumps(send_message),
+                        headers={'Content-Type': 'application/json'})
+
+    logger.debug(res.json())
 
 
 class CreateTelegramApiClient(object):
@@ -76,6 +86,12 @@ async def refresh_post(request):
                 request.app['page'][chat['page_id']] = chat['id']
 
             if chat.get('access_token', False):
+                for menu in chat['persistent_menu']:
+                    await send_message_profile(chat['access_token'],
+                                               {'whitelisted_domains': menu['whitelisted_domains']})
+
+                await send_message_profile(chat['access_token'], chat['persistent_menu'][0])
+
                 formed_chat['fb'] = CreateFacebookApiClient(access_token=chat['access_token'])
 
             if chat.get('telegram', False):
@@ -174,14 +190,14 @@ async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value):
     if brick_type == 'brick':
         await find_custom_brick(client=fb, platform='facebook', brick_id=value,
                                 command='final', brick_data={'id': value},
-                                msg_data=raw_msg_data)
+                                msg_data=raw_msg_data, brick_config=chat.get('brick_data', None))
 
     # payload가 브릭과 관련된 경우인지 확인하는 부분
     if brick_type == 'postback' and value.startswith('brick|'):
         brick_payalod_cmd = brick_payload(value)
         await find_custom_brick(client=fb, platform='facebook', brick_id=brick_payalod_cmd['brick_id'],
                                 command=brick_payalod_cmd['command'], brick_data={'id': brick_payalod_cmd['brick_id']},
-                                msg_data=raw_msg_data)
+                                msg_data=raw_msg_data, brick_config=chat.get('brick_data', None))
 
     # 일반적인 경우에는 여기서 진행함 - 미리 만들어진 시나리오를 통해 동작하는 경우
     for brick in chat['bricks']:
@@ -214,7 +230,7 @@ async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value):
                     logger.info(
                         await find_custom_brick(client=fb, platform='facebook', brick_id=send_action['brick']['id'],
                                                 command='get_started', brick_data=send_action['brick'],
-                                                msg_data=raw_msg_data))
+                                                msg_data=raw_msg_data, brick_config=chat.get('brick_data', None)))
             break
 
     await fb.set_mark_seen(rep)

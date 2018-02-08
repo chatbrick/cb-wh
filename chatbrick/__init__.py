@@ -18,11 +18,40 @@ class CreateTelegramApiClient(object):
     def __init__(self, token):
         self.token = token
 
+    async def send_action(self, method, chat_id):
+        action = None
+        if method is not None:
+            if method == 'sendMessage':
+                action = 'typing'
+            elif method == 'sendPhoto':
+                action = 'upload_photo'
+            elif method == 'sendAudio':
+                action = 'upload_audio'
+            elif method == 'sendVideo':
+                action = 'upload_video'
+            elif method == 'sendDocument':
+                action = 'upload_document'
+            elif method == 'sendVideoNote':
+                action = 'record_video_note'
+            elif method == 'sendLocation':
+                action = 'find_location'
+
+            if action is not None:
+                req = requests.post(url='https://api.telegram.org/bot%s/sendChatAction' % self.token,
+                                    data=json.dumps({
+                                        'chat_id': chat_id,
+                                        'action': action
+                                    }),
+                                    headers={'Content-Type': 'application/json'},
+                                    timeout=15)
+
+                logger.debug(req.json())
+
     async def send_message(self, method, message):
         req = requests.post(url='https://api.telegram.org/bot%s/%s' % (self.token, method),
                             data=json.dumps(message),
                             headers={'Content-Type': 'application/json'},
-                            timeout=5)
+                            timeout=15)
 
         return req.json()
 
@@ -41,7 +70,6 @@ async def send_message_profile(access_token, send_message):
 
 
 async def setup_db():
-
     db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
     chats = await db.facebook.find({}).to_list(length=1000)
     page_data = {}

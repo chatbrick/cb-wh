@@ -41,7 +41,7 @@ async def telegram_post(request):
     logger.info(data)
 
     if tg:
-        chat = chat_data['chat']['telegram']['bricks']
+        chat = chat_data['chat']
 
         request.app.loop.create_task(tg_message_poc(tg, chat, data))
     return web.Response(text='null', status=200)
@@ -106,34 +106,42 @@ async def tg_message_poc(tg, chat, data):
         else:
             commands['value'] = command
 
-        await find_brick(tg, chat, callback, 'callback', **commands)
+        if commands.get('value', False) and commands['value'] == 'start':
+            brick_type = 'bot_command'
+        else:
+            brick_type = 'callback'
+        await find_brick(tg, chat, callback, brick_type, **commands)
 
 
 async def find_brick(tg, chat, raw_message, brick_type, **kwargs):
     logger.info(brick_type)
     logger.info(kwargs)
+    brick_data = chat.get('brick_data', None)
+
     if 'brick' in kwargs:
         await find_custom_brick(client=tg, platform='telegram', brick_id=kwargs['brick'],
                                 command=kwargs['sub_command'], brick_data={'id': kwargs['brick']},
-                                msg_data=raw_message)
+                                msg_data=raw_message, brick_config=brick_data)
     else:
-        for brick in chat:
+        for brick in chat['telegram']['bricks']:
             if brick['type'] == brick_type and brick['value'] == kwargs['value']:
                 if kwargs.get('seq', False):
                     action = brick['edits'][int(kwargs['seq'])]
                     send_message = action['message']
                     send_message['chat_id'] = raw_message['from']['id']
                     send_message['message_id'] = raw_message['message']['message_id']
+                    await tg.send_action(action['method'], send_message['chat_id'])
                     logger.info(await tg.send_message(action['method'], send_message))
                 else:
                     for action in brick['actions']:
                         if 'message' in action:
                             send_message = action['message']
                             send_message['chat_id'] = raw_message['from']['id']
+                            await tg.send_action(action['method'], send_message['chat_id'])
                             logger.info(await tg.send_message(action['method'], send_message))
                         elif 'brick' in action:
                             logger.info(
                                 await find_custom_brick(client=tg, platform='telegram',
                                                         brick_id=action['brick']['id'],
                                                         command='get_started', brick_data=action['brick'],
-                                                        msg_data=raw_message))
+                                                        msg_data=raw_message, brick_config=brick_data))
