@@ -1,19 +1,18 @@
 import logging
 
-import urllib.parse
-
 import blueforge.apis.telegram as tg
+import urllib.parse
 import requests
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
 
-from chatbrick.util import get_items_from_xml
+from chatbrick.util import get_items_from_xml, remove_html_tag
 
 logger = logging.getLogger(__name__)
 
 BRICK_DEFAULT_IMAGE = 'https://www.chatbrick.io/api/static/brick/img_brick_05_001.png'
 
 
-class SafeJourney(object):
+class BroadSos(object):
     def __init__(self, fb, brick_db):
         self.brick_db = brick_db
         self.fb = fb
@@ -27,7 +26,7 @@ class SafeJourney(object):
                     )
                 ),
                 Message(
-                    text='외교부에서 제공하는 "여행경보 조회 서비스"에요.'
+                    text='외교부에서 제공하는 "해외에서 SOS 서비스"에요.'
                 )
             ]
             await self.fb.send_messages(send_message)
@@ -36,7 +35,7 @@ class SafeJourney(object):
             input_data = await self.brick_db.get()
             country = input_data['store'][0]['value']
             res = requests.get(
-                url='http://apis.data.go.kr/1262000/TravelWarningService/getTravelWarningList?serviceKey=%s&numOfRows=10&pageSize=10&pageNo=1&startPage=1&countryName=%s' % (
+                url='http://apis.data.go.kr/1262000/ContactService/getContactList?serviceKey=%s&numOfRows=10&pageSize=10&pageNo=1&startPage=1&countryName=%s' % (
                     input_data['data']['api_key'], urllib.parse.quote_plus(country)))
 
             items = get_items_from_xml(res)
@@ -48,24 +47,30 @@ class SafeJourney(object):
                         quick_replies=QuickReply(
                             quick_reply_items=[
                                 QuickReplyTextItem(
-                                    title='다른 국가검색',
-                                    payload='brick|safe_journey|get_started'
+                                    title='다른 국가조회',
+                                    payload='brick|broad_sos|get_started'
                                 )
                             ]
                         )
                     )
                 ]
             else:
+                sending_message = []
+                for item in items:
+                    item['contact'] = remove_html_tag(item['contact'])
+                    sending_message.append('국가 : {countryName}\n구분 : {continent}\n내용 : \n{contact}'.format(**item))
+
                 send_message = [
                     Message(
-                        attachment=ImageAttachment(
-                            url='{imgUrl2}'.format(**items[0])
-                        ),
+                        text='조회된 결과에요'
+                    ),
+                    Message(
+                        text='\n\n'.join(sending_message),
                         quick_replies=QuickReply(
                             quick_reply_items=[
                                 QuickReplyTextItem(
-                                    title='다른 국가검색',
-                                    payload='brick|safe_journey|get_started'
+                                    title='다른 국가조회',
+                                    payload='brick|broad_sos|get_started'
                                 )
                             ]
                         )
@@ -83,7 +88,7 @@ class SafeJourney(object):
                     photo=BRICK_DEFAULT_IMAGE
                 ),
                 tg.SendMessage(
-                    text='외교부에서 제공하는 "여행경보 조회 서비스"에요.'
+                    text='외교부에서 제공하는 "해외에서 SOS 서비스"에요.'
                 )
 
             ]
@@ -93,7 +98,7 @@ class SafeJourney(object):
             input_data = await self.brick_db.get()
             country = input_data['store'][0]['value']
             res = requests.get(
-                url='http://apis.data.go.kr/1262000/TravelWarningService/getTravelWarningList?serviceKey=%s&numOfRows=10&pageSize=10&pageNo=1&startPage=1&countryName=%s' % (
+                url='http://apis.data.go.kr/1262000/ContactService/getContactList?serviceKey=%s&numOfRows=10&pageSize=10&pageNo=1&startPage=1&countryName=%s' % (
                     input_data['data']['api_key'], urllib.parse.quote_plus(country)))
 
             items = get_items_from_xml(res)
@@ -101,29 +106,25 @@ class SafeJourney(object):
             if len(items) == 0:
                 send_message = [
                     tg.SendMessage(
-                        text='조회된 결과가 없습니다.',
-                        reply_markup=tg.MarkUpContainer(
-                            inline_keyboard=[
-                                [
-                                    tg.CallbackButton(
-                                        text='다른 국가검색',
-                                        callback_data='BRICK|safe_journey|get_started'
-                                    )
-                                ]
-                            ]
-                        )
+                        text='조회된 결과가 없습니다.'
                     )
                 ]
             else:
+                sending_message = []
+                for item in items:
+                    item['contact'] = remove_html_tag(item['contact'])
+                    sending_message.append('*{countryName}*\n구분 : {continent}\n내용 : \n{contact}'.format(**item))
+
                 send_message = [
-                    tg.SendPhoto(
-                        photo='{imgUrl2}'.format(**items[0]),
+                    tg.SendMessage(
+                        text='\n\n'.join(sending_message),
+                        parse_mode='Markdown',
                         reply_markup=tg.MarkUpContainer(
                             inline_keyboard=[
                                 [
                                     tg.CallbackButton(
-                                        text='다른 국가검색',
-                                        callback_data='BRICK|safe_journey|get_started'
+                                        text='다른 국가조회',
+                                        callback_data='BRICK|broad_sos|get_started'
                                     )
                                 ]
                             ]

@@ -10,8 +10,33 @@ from .lotto import Lotto
 from .luck import Luck
 from .mailer import Mailer
 from .send_email import SendEmail
+from .broad_sos import BroadSos
+from .broad_sos import BroadSos
+from .icn import Icn
+from .address import Address
+from .country import Country
+from .safe_journey import SafeJourney
+from .epost import EPost
+from .train import Train
+from .elec import Electric
 
 logger = logging.getLogger(__name__)
+
+BRICK = {
+    'mailer': Mailer,
+    'lotto': Lotto,
+    'luck': Luck,
+    'emergency': Emergency,
+    'safe_journey': SafeJourney,
+    'holiday': Holiday,
+    'broad_sos': BroadSos,
+    'icn': Icn,
+    'address': Address,
+    'country': Country,
+    'epost': EPost,
+    'train': Train,
+    'electric': Electric
+}
 
 
 class BrickFacebookAPIClient(object):
@@ -150,79 +175,24 @@ async def find_custom_brick(client, platform, brick_id, command, brick_data, msg
 
     logger.info('find_custom_brick/brick_config')
     logger.info(brick_config)
-    if platform == 'facebook':
-        fb = BrickFacebookAPIClient(fb=client, rep=Recipient(recipient_id=msg_data['sender']['id']))
-        brick_input = BrickInputMessage(fb=fb, platform=platform, rep=fb.rep, brick_data=brick_data)
-        if brick_id == 'send_email':
-            email = SendEmail(receiver_email=brick_config['receiver_email'], title=brick_config['title'])
-            return email.facebook(fb_token=client.access_token, psid=msg_data['sender']['id'])
-        elif brick_id == 'lotto':
-            lotto = Lotto(
-                fb=fb,
-                brick_db=brick_input
-            )
+    brick = BRICK.get(brick_id, False)
 
-            return await lotto.facebook(command)
-        elif brick_id == 'mailer':
-            mailer = Mailer(
-                fb=fb,
-                brick_db=brick_input
-            )
-            return await mailer.facebook(command)
-        elif brick_id == 'luck':
-            luck = Luck(
-                fb=fb,
-                brick_db=brick_input
-            )
-            return await luck.facebook(command)
-        elif brick_id == 'emergency':
-            emergency = Emergency(
-                fb=fb,
-                brick_db=brick_input
-            )
-            return await emergency.facebook(command)
-        elif brick_id == 'holiday':
-            holiday = Holiday(
-                fb=fb,
-                brick_db=brick_input
-            )
-            return await holiday.facebook(command)
+    if brick:
+        if platform == 'facebook':
+            fb = BrickFacebookAPIClient(fb=client, rep=Recipient(recipient_id=msg_data['sender']['id']))
+            brick_input = BrickInputMessage(fb=fb, platform=platform, rep=fb.rep, brick_data=brick_data)
+            if brick is SendEmail:
+                email = SendEmail(receiver_email=brick_config['receiver_email'], title=brick_config['title'])
+                return email.facebook(fb_token=client.access_token, psid=msg_data['sender']['id'])
+            else:
+                return await brick(fb=fb, brick_db=brick_input).facebook(command)
 
-    elif platform == 'telegram':
-        tg = BrickTelegramAPIClient(tg=client, rep=msg_data['from']['id'])
-        brick_input = BrickInputMessage(fb=tg, platform=platform, rep=tg.rep, brick_data=brick_data)
+        elif platform == 'telegram':
+            tg = BrickTelegramAPIClient(tg=client, rep=msg_data['from']['id'])
+            brick_input = BrickInputMessage(fb=tg, platform=platform, rep=tg.rep, brick_data=brick_data)
 
-        if brick_id == 'send_email':
-            email = SendEmail(receiver_email=brick_config['receiver_email'], title=brick_config['title'])
-            return email.telegram(sender=msg_data['from'])
-        elif brick_id == 'lotto':
-            lotto = Lotto(
-                fb=tg,
-                brick_db=brick_input
-            )
-            return await lotto.telegram(command)
-        elif brick_id == 'mailer':
-            mailer = Mailer(
-                fb=tg,
-                brick_db=brick_input
-            )
-            return await mailer.telegram(command)
-
-        elif brick_id == 'luck':
-            luck = Luck(
-                fb=tg,
-                brick_db=brick_input
-            )
-            return await luck.telegram(command)
-        elif brick_id == 'emergency':
-            emergency = Emergency(
-                fb=tg,
-                brick_db=brick_input
-            )
-            return await emergency.telegram(command)
-        elif brick_id == 'holiday':
-            holiday = Holiday(
-                fb=tg,
-                brick_db=brick_input
-            )
-            return await holiday.telegram(command)
+            if brick_id == 'send_email':
+                email = SendEmail(receiver_email=brick_config['receiver_email'], title=brick_config['title'])
+                return email.telegram(sender=msg_data['from'])
+            else:
+                return await brick(fb=tg, brick_db=brick_input).telegram(command)

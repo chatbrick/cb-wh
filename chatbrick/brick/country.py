@@ -1,19 +1,18 @@
 import logging
-
 import urllib.parse
 
 import blueforge.apis.telegram as tg
 import requests
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
 
-from chatbrick.util import get_items_from_xml
+from chatbrick.util import get_items_from_xml, remove_html_tag
 
 logger = logging.getLogger(__name__)
 
 BRICK_DEFAULT_IMAGE = 'https://www.chatbrick.io/api/static/brick/img_brick_05_001.png'
 
 
-class SafeJourney(object):
+class Country(object):
     def __init__(self, fb, brick_db):
         self.brick_db = brick_db
         self.fb = fb
@@ -27,7 +26,7 @@ class SafeJourney(object):
                     )
                 ),
                 Message(
-                    text='외교부에서 제공하는 "여행경보 조회 서비스"에요.'
+                    text='외교부에서 제공하는 "해외국가정보 서비스"에요.'
                 )
             ]
             await self.fb.send_messages(send_message)
@@ -36,7 +35,7 @@ class SafeJourney(object):
             input_data = await self.brick_db.get()
             country = input_data['store'][0]['value']
             res = requests.get(
-                url='http://apis.data.go.kr/1262000/TravelWarningService/getTravelWarningList?serviceKey=%s&numOfRows=10&pageSize=10&pageNo=1&startPage=1&countryName=%s' % (
+                url='http://apis.data.go.kr/1262000/CountryBasicService/getCountryBasicList?serviceKey=%s&numOfRows=10&pageSize=10&pageNo=1&startPage=1&countryName=%s' % (
                     input_data['data']['api_key'], urllib.parse.quote_plus(country)))
 
             items = get_items_from_xml(res)
@@ -49,29 +48,36 @@ class SafeJourney(object):
                             quick_reply_items=[
                                 QuickReplyTextItem(
                                     title='다른 국가검색',
-                                    payload='brick|safe_journey|get_started'
+                                    payload='brick|country|get_started'
                                 )
                             ]
                         )
                     )
                 ]
             else:
+                items[0]['basic'] = remove_html_tag(items[0]['basic'])
                 send_message = [
                     Message(
                         attachment=ImageAttachment(
-                            url='{imgUrl2}'.format(**items[0])
-                        ),
+                            url='{imgUrl}'.format(**items[0])
+                        )
+                    ),
+                    Message(
+                        text='{continent}\n*{countryName}({countryEnName})*\n{basic}'.format(**items[0])
+                    ),
+                    Message(
+                        text='{basic}'.format(
+                            **items[0]),
                         quick_replies=QuickReply(
                             quick_reply_items=[
                                 QuickReplyTextItem(
                                     title='다른 국가검색',
-                                    payload='brick|safe_journey|get_started'
+                                    payload='brick|country|get_started'
                                 )
                             ]
                         )
                     )
                 ]
-
             await self.brick_db.delete()
             await self.fb.send_messages(send_message)
         return None
@@ -83,7 +89,7 @@ class SafeJourney(object):
                     photo=BRICK_DEFAULT_IMAGE
                 ),
                 tg.SendMessage(
-                    text='외교부에서 제공하는 "여행경보 조회 서비스"에요.'
+                    text='외교부에서 제공하는 "해외국가정보 서비스"에요.'
                 )
 
             ]
@@ -93,7 +99,7 @@ class SafeJourney(object):
             input_data = await self.brick_db.get()
             country = input_data['store'][0]['value']
             res = requests.get(
-                url='http://apis.data.go.kr/1262000/TravelWarningService/getTravelWarningList?serviceKey=%s&numOfRows=10&pageSize=10&pageNo=1&startPage=1&countryName=%s' % (
+                url='http://apis.data.go.kr/1262000/CountryBasicService/getCountryBasicList?serviceKey=%s&numOfRows=10&pageSize=10&pageNo=1&startPage=1&countryName=%s' % (
                     input_data['data']['api_key'], urllib.parse.quote_plus(country)))
 
             items = get_items_from_xml(res)
@@ -107,7 +113,7 @@ class SafeJourney(object):
                                 [
                                     tg.CallbackButton(
                                         text='다른 국가검색',
-                                        callback_data='BRICK|safe_journey|get_started'
+                                        callback_data='BRICK|country|get_started'
                                     )
                                 ]
                             ]
@@ -115,15 +121,21 @@ class SafeJourney(object):
                     )
                 ]
             else:
+                items[0]['basic'] = remove_html_tag(items[0]['basic'])
+
                 send_message = [
                     tg.SendPhoto(
-                        photo='{imgUrl2}'.format(**items[0]),
+                      photo='{imgUrl}'.format(**items[0])
+                    ),
+                    tg.SendMessage(
+                        text='{continent}\n*{countryName}({countryEnName})*\n{basic}'.format(**items[0]),
+                        parse_mode='Markdown',
                         reply_markup=tg.MarkUpContainer(
                             inline_keyboard=[
                                 [
                                     tg.CallbackButton(
                                         text='다른 국가검색',
-                                        callback_data='BRICK|safe_journey|get_started'
+                                        callback_data='BRICK|country|get_started'
                                     )
                                 ]
                             ]

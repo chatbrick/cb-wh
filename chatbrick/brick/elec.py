@@ -1,7 +1,5 @@
 import logging
-
 import urllib.parse
-
 import blueforge.apis.telegram as tg
 import requests
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
@@ -10,10 +8,10 @@ from chatbrick.util import get_items_from_xml
 
 logger = logging.getLogger(__name__)
 
-BRICK_DEFAULT_IMAGE = 'https://www.chatbrick.io/api/static/brick/img_brick_05_001.png'
+BRICK_DEFAULT_IMAGE = 'https://www.chatbrick.io/api/static/brick/img_brick_14_001.png'
 
 
-class SafeJourney(object):
+class Electric(object):
     def __init__(self, fb, brick_db):
         self.brick_db = brick_db
         self.fb = fb
@@ -27,17 +25,17 @@ class SafeJourney(object):
                     )
                 ),
                 Message(
-                    text='외교부에서 제공하는 "여행경보 조회 서비스"에요.'
+                    text='한국전력공사에서 제공하는 "전기차충전소 조회 서비스"에요.'
                 )
             ]
             await self.fb.send_messages(send_message)
             await self.brick_db.save()
         elif command == 'final':
             input_data = await self.brick_db.get()
-            country = input_data['store'][0]['value']
+            place = input_data['store'][0]['value']
             res = requests.get(
-                url='http://apis.data.go.kr/1262000/TravelWarningService/getTravelWarningList?serviceKey=%s&numOfRows=10&pageSize=10&pageNo=1&startPage=1&countryName=%s' % (
-                    input_data['data']['api_key'], urllib.parse.quote_plus(country)))
+                url='http://openapi.kepco.co.kr/service/evInfoService/getEvSearchList?serviceKey=%s&numOfRows=100&pageSize=100&pageNo=1&startPage=1&addr=%s' % (
+                    input_data['data']['api_key'], urllib.parse.quote_plus(place)))
 
             items = get_items_from_xml(res)
 
@@ -48,24 +46,27 @@ class SafeJourney(object):
                         quick_replies=QuickReply(
                             quick_reply_items=[
                                 QuickReplyTextItem(
-                                    title='다른 국가검색',
-                                    payload='brick|safe_journey|get_started'
+                                    title='다른 지역검색',
+                                    payload='brick|electric|get_started'
                                 )
                             ]
                         )
                     )
                 ]
             else:
+                sending_message = ''
+                for item in items:
+                    sending_message += '충전소명 : {csNm}\n충전소ID : {cpId}\n충전타입 : {cpNm}\n상태 : {cpStat}\n주소 : {addr}\n\n'.format(
+                        **item)
+
                 send_message = [
                     Message(
-                        attachment=ImageAttachment(
-                            url='{imgUrl2}'.format(**items[0])
-                        ),
+                        text=sending_message,
                         quick_replies=QuickReply(
                             quick_reply_items=[
                                 QuickReplyTextItem(
-                                    title='다른 국가검색',
-                                    payload='brick|safe_journey|get_started'
+                                    title='다른 충전소 검색',
+                                    payload='brick|electric|get_started'
                                 )
                             ]
                         )
@@ -83,7 +84,7 @@ class SafeJourney(object):
                     photo=BRICK_DEFAULT_IMAGE
                 ),
                 tg.SendMessage(
-                    text='외교부에서 제공하는 "여행경보 조회 서비스"에요.'
+                    text='한국전력공사에서 제공하는 "전기차충전소 조회 서비스"에요.'
                 )
 
             ]
@@ -91,45 +92,42 @@ class SafeJourney(object):
             await self.brick_db.save()
         elif command == 'final':
             input_data = await self.brick_db.get()
-            country = input_data['store'][0]['value']
+            place = input_data['store'][0]['value']
             res = requests.get(
-                url='http://apis.data.go.kr/1262000/TravelWarningService/getTravelWarningList?serviceKey=%s&numOfRows=10&pageSize=10&pageNo=1&startPage=1&countryName=%s' % (
-                    input_data['data']['api_key'], urllib.parse.quote_plus(country)))
+                url='http://openapi.kepco.co.kr/service/evInfoService/getEvSearchList?serviceKey=%s&numOfRows=100&pageSize=100&pageNo=1&startPage=1&addr=%s' % (
+                    input_data['data']['api_key'], urllib.parse.quote_plus(place)))
 
             items = get_items_from_xml(res)
 
             if len(items) == 0:
                 send_message = [
                     tg.SendMessage(
-                        text='조회된 결과가 없습니다.',
-                        reply_markup=tg.MarkUpContainer(
-                            inline_keyboard=[
-                                [
-                                    tg.CallbackButton(
-                                        text='다른 국가검색',
-                                        callback_data='BRICK|safe_journey|get_started'
-                                    )
-                                ]
-                            ]
-                        )
+                        text='조회된 결과가 없습니다.'
                     )
                 ]
             else:
+                sending_message = ''
+                for item in items:
+                    sending_message += '*{csNm}*\n충전소ID : {cpId}\n충전타입 : {cpNm}\n상태 : {cpStat}\n주소 : {addr}\n[구글지도](https://www.google.com/maps/?q={lat},{longi})\n\n'.format(
+                        **item)
                 send_message = [
-                    tg.SendPhoto(
-                        photo='{imgUrl2}'.format(**items[0]),
+                    tg.SendMessage(
+                        text=sending_message,
+                        parse_mode='Markdown',
+                        disable_web_page_preview=True,
                         reply_markup=tg.MarkUpContainer(
                             inline_keyboard=[
                                 [
                                     tg.CallbackButton(
-                                        text='다른 국가검색',
-                                        callback_data='BRICK|safe_journey|get_started'
+                                        text='다른 충전소 검색',
+                                        callback_data='BRICK|electric|get_started'
                                     )
                                 ]
                             ]
                         )
                     )
                 ]
+
             await self.brick_db.delete()
             await self.fb.send_messages(send_message)
         return None
