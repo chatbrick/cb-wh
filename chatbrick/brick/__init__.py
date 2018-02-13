@@ -1,6 +1,7 @@
 import logging
 import os
-
+import requests
+import time
 import motor.motor_asyncio
 from blueforge.apis.facebook import Recipient, RequestDataFormat
 
@@ -19,6 +20,10 @@ from .safe_journey import SafeJourney
 from .epost import EPost
 from .train import Train
 from .elec import Electric
+from .personality_insights import PersonalityInsight
+from .whoami import Who
+from .face import Face
+from .emotion import Emotion
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +40,11 @@ BRICK = {
     'country': Country,
     'epost': EPost,
     'train': Train,
-    'electric': Electric
+    'electric': Electric,
+    'personality': PersonalityInsight,
+    'who': Who,
+    'face': Face,
+    'emotion': Emotion
 }
 
 
@@ -45,11 +54,32 @@ class BrickFacebookAPIClient(object):
         self.rep = rep
 
     async def send_messages(self, messages):
-        for message in messages:
+        for idx, message in enumerate(messages):
+            start = int(time.time() * 1000)
+
             await self.fb.send_message(RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE'))
+            requests.post('https://www.chatbrick.io/api/log/', data={
+                'brick_id': '',
+                'platform': 'facebook',
+                'start': start,
+                'end': int(time.time() * 1000),
+                'tag': '페이스북,여러메시지호출,%s,%s' % (idx, self.rep.recipient_id),
+                'data': RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE').get_data(),
+                'remark': '페이스북 메시지호출'
+            })
 
     async def send_message(self, message):
+        start = int(time.time() * 1000)
         await self.fb.send_message(RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE'))
+        requests.post('https://www.chatbrick.io/api/log/', data={
+            'brick_id': '',
+            'platform': 'facebook',
+            'start': start,
+            'end': int(time.time() * 1000),
+            'tag': '페이스북,단건메시지호출,%s' % self.rep.recipient_id,
+            'data': RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE').get_data(),
+            'remark': '페이스북 메시지호출'
+        })
 
 
 class BrickTelegramAPIClient(object):
@@ -57,8 +87,12 @@ class BrickTelegramAPIClient(object):
         self.tg = tg
         self.rep = rep
 
+    async def send_action(self, method):
+        await self.tg.send_action(method, self.rep)
+
     async def send_messages(self, messages):
-        for message in messages:
+        for idx, message in enumerate(messages):
+
             if type(message) is not dict:
                 dict_message = message.get_data()
                 dict_message['chat_id'] = self.rep
@@ -68,9 +102,9 @@ class BrickTelegramAPIClient(object):
             else:
                 message['message']['chat_id'] = self.rep
                 await self.tg.send_action(message.get_method(), self.rep)
-                await self.tg.send_message(message['method'], message['message'])
 
     async def send_message(self, message):
+
         if type(message) is not dict:
             dict_message = message.get_data()
             dict_message['chat_id'] = self.rep
@@ -113,12 +147,14 @@ class BrickInputMessage(object):
                     input_data['store'].append({
                         'message': u_input['message'],
                         'key': u_input['key'],
+                        'type': u_input.get('type', 'text'),
                         'value': 'pass'
                     })
                 else:
                     input_data['store'].append({
                         'message': u_input['message'],
                         'key': u_input['key'],
+                        'type': u_input.get('type', 'text'),
                         'value': ''
                     })
 
@@ -133,12 +169,14 @@ class BrickInputMessage(object):
                     input_data['store'].append({
                         'message': u_input['tg_message'],
                         'key': u_input['key'],
+                        'type': u_input.get('type', 'text'),
                         'value': 'pass'
                     })
                 else:
                     input_data['store'].append({
                         'message': u_input['tg_message'],
                         'key': u_input['key'],
+                        'type': u_input.get('type', 'text'),
                         'value': ''
                     })
 

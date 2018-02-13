@@ -4,6 +4,7 @@ import json
 import logging
 import requests
 import os
+import time
 
 from blueforge.apis.facebook import CreateFacebookApiClient
 from bson.json_util import dumps
@@ -21,10 +22,10 @@ class CreateTelegramApiClient(object):
     async def send_action(self, method, chat_id):
         action = None
         if method is not None:
-            if method == 'sendMessage':
-                action = 'typing'
-            elif method == 'sendPhoto':
+            if method == 'sendPhoto':
                 action = 'upload_photo'
+            elif method == 'goSendMessage':
+                action = 'typing'
             elif method == 'sendAudio':
                 action = 'upload_audio'
             elif method == 'sendVideo':
@@ -33,8 +34,8 @@ class CreateTelegramApiClient(object):
                 action = 'upload_document'
             elif method == 'sendVideoNote':
                 action = 'record_video_note'
-            elif method == 'sendLocation':
-                action = 'find_location'
+            # elif method == 'sendLocation':
+            #     action = 'find_location'
 
             if action is not None:
                 req = requests.post(url='https://api.telegram.org/bot%s/sendChatAction' % self.token,
@@ -48,11 +49,21 @@ class CreateTelegramApiClient(object):
                 logger.debug(req.json())
 
     async def send_message(self, method, message):
+        start = int(time.time() * 1000)
         req = requests.post(url='https://api.telegram.org/bot%s/%s' % (self.token, method),
                             data=json.dumps(message),
                             headers={'Content-Type': 'application/json'},
                             timeout=15)
 
+        requests.post('https://www.chatbrick.io/api/log/', data={
+            'brick_id': '',
+            'platform': 'telegram',
+            'start': start,
+            'end': int(time.time() * 1000),
+            'tag': '텔레그램,단건,%s' % method,
+            'data': json.dumps(message),
+            'remark': '텔레그램 브릭외에서 단건 메시지호출'
+        })
         return req.json()
 
     @property

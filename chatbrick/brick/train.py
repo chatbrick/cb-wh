@@ -1,5 +1,6 @@
 import logging
 
+import time
 import blueforge.apis.telegram as tg
 import requests
 import dateutil.parser
@@ -122,6 +123,7 @@ class Train(object):
             destination_station = input_data['store'][1]['value'].strip()
             departure_date = input_data['store'][2]['value']
             train_type = input_data['store'][3]['value']
+            start = int(time.time() * 1000)
 
             res = requests.get(
                 url='http://openapi.tago.go.kr/openapi/service/TrainInfoService/getStrtpntAlocFndTrainInfo?serviceKey=%s&numOfRows=500&pageSize=500&pageNo=1&startPage=1&depPlaceId=%s&arrPlaceId=%s&depPlandTime=%s&trainGradeCode=%s' % (
@@ -129,6 +131,15 @@ class Train(object):
                     departure_date, train_type))
 
             items = get_items_from_xml(res)
+            requests.post('https://www.chatbrick.io/api/log/', data={
+                'brick_id': 'train',
+                'platform': 'facebook',
+                'start': start,
+                'end': int(time.time() * 1000),
+                'tag': '페이스북,철도,시간,조회,API',
+                'data': items,
+                'remark': '철도 시간표 조회 API 호출'
+            })
 
             if len(items) == 0:
                 send_message = [
@@ -207,6 +218,7 @@ class Train(object):
             destination_station = input_data['store'][1]['value'].strip()
             departure_date = input_data['store'][2]['value']
             train_type = input_data['store'][3]['value']
+            start = int(time.time() * 1000)
 
             res = requests.get(
                 url='http://openapi.tago.go.kr/openapi/service/TrainInfoService/getStrtpntAlocFndTrainInfo?serviceKey=%s&numOfRows=500&pageSize=500&pageNo=1&startPage=1&depPlaceId=%s&arrPlaceId=%s&depPlandTime=%s&trainGradeCode=%s' % (
@@ -214,6 +226,16 @@ class Train(object):
                     departure_date, train_type))
 
             items = get_items_from_xml(res)
+
+            requests.post('https://www.chatbrick.io/api/log/', data={
+                'brick_id': 'train',
+                'platform': 'telegram',
+                'start': start,
+                'end': int(time.time() * 1000),
+                'tag': '페이스북,철도,시간,조회,API',
+                'data': items,
+                'remark': '철도 시간표 조회 API 호출'
+            })
 
             if len(items) == 0:
                 send_message = [

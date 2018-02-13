@@ -61,39 +61,89 @@ async def tg_message_poc(tg, chat, data):
                 logger.info('Command: %s' % command)
                 await find_brick(tg, chat, message, 'bot_command', **commands)
 
+        db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
+        text_input = await db.message_store.find_one({'id': message['from']['id'],
+                                                      'platform': 'telegram'})
         if 'text' in data['message'] and is_go:
             logger.info('only text')
-            db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
-            text_input = await db.message_store.find_one({'id': message['from']['id'],
-                                                          'platform': 'telegram'})
+
             logger.info('text_input')
             logger.info(text_input)
             if text_input:
                 is_final = False
+                is_go_on = False
                 final_store_idx = None
                 store_len = len(text_input['store'])
                 logger.info(store_len)
                 for idx, store in enumerate(text_input['store']):
                     if store['value'] == '':
-                        logger.info(db.message_store.update_one({'_id': text_input['_id']}, {
-                            '$set': {'store.%d.value' % idx: data['message']['text']}}))
+                        if store.get('type', 'text') == 'text':
+                            logger.info(db.message_store.update_one({'_id': text_input['_id']}, {
+                                '$set': {'store.%d.value' % idx: data['message']['text']}}))
 
-                        logger.info(idx)
-                        logger.info(store_len)
-                        if store_len == 1 or ((idx + 1) == store_len):
-                            is_final = True
-                        else:
-                            final_store_idx = idx + 1
-                            logger.info(final_store_idx)
-                            break
+                            logger.info(idx)
+                            logger.info(store_len)
+                            if store_len == 1 or ((idx + 1) == store_len):
+                                is_final = True
+                            else:
+                                final_store_idx = idx + 1
+                                logger.info(final_store_idx)
+                                is_go_on = True
+                                break
 
                 if is_final:
                     await find_brick(tg, chat, message, None, brick=text_input['brick_id'], sub_command='final')
-                else:
+                elif is_go_on:
                     action_message = text_input['store'][final_store_idx]['message']['message']
                     action_message['chat_id'] = message['from']['id']
                     logger.info(await tg.send_message(text_input['store'][final_store_idx]['message']['method'],
                                                       action_message))
+        elif 'photo' in data['message'] and is_go:
+            logger.info('Photo!!')
+
+            if text_input:
+                is_final = False
+                is_go_on = False
+                final_store_idx = None
+                store_len = len(text_input['store'])
+                logger.info(store_len)
+                for idx, store in enumerate(text_input['store']):
+                    if store['value'] == '':
+                        if store.get('type', 'text') == 'image':
+                            last_photo = data['message']['photo'][-2]
+
+                            if last_photo.get('file_path', False):
+                                image_url = last_photo['file_path']
+                            else:
+                                parsed_file = await tg.send_message('getFile', {
+                                    'file_id': data['message']['photo'][-2]['file_id']
+                                })
+                                logger.info(parsed_file)
+                                image_url = parsed_file['result']['file_path']
+
+                            logger.info(db.message_store.update_one({'_id': text_input['_id']}, {
+                                '$set': {
+                                    'store.%d.value' % idx: 'https://api.telegram.org/file/bot{token}/{file_path}'.format(
+                                        token=tg.token, file_path=image_url)}}))
+
+                            logger.info(idx)
+                            logger.info(store_len)
+                            if store_len == 1 or ((idx + 1) == store_len):
+                                is_final = True
+                            else:
+                                final_store_idx = idx + 1
+                                logger.info(final_store_idx)
+                                is_go_on = True
+                                break
+
+                if is_final:
+                    await find_brick(tg, chat, message, None, brick=text_input['brick_id'], sub_command='final')
+                elif is_go_on:
+                    action_message = text_input['store'][final_store_idx]['message']['message']
+                    action_message['chat_id'] = message['from']['id']
+                    logger.info(await tg.send_message(text_input['store'][final_store_idx]['message']['method'],
+                                                      action_message))
+        # if 'attatchments' in data['message'] and
 
     elif 'callback_query' in data:
         callback = data['callback_query']

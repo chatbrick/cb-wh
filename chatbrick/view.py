@@ -7,13 +7,13 @@ import motor.motor_asyncio
 import os
 import json
 import requests
+import time
 
 from bson.json_util import dumps
 from blueforge.apis.facebook import RequestDataFormat, Recipient
 from aiohttp import web
 from chatbrick.brick import find_custom_brick
 from blueforge.apis.facebook import CreateFacebookApiClient
-
 
 logger = logging.getLogger('aiohttp.access')
 loop = asyncio.get_event_loop()
@@ -35,10 +35,10 @@ class CreateTelegramApiClient(object):
     async def send_action(self, method, chat_id):
         action = None
         if method is not None:
-            if method == 'sendMessage':
-                action = 'typing'
-            elif method == 'sendPhoto':
+            if method == 'sendPhoto':
                 action = 'upload_photo'
+            elif method == 'goSendMessage':
+                action = 'typing'
             elif method == 'sendAudio':
                 action = 'upload_audio'
             elif method == 'sendVideo':
@@ -47,8 +47,8 @@ class CreateTelegramApiClient(object):
                 action = 'upload_document'
             elif method == 'sendVideoNote':
                 action = 'record_video_note'
-            elif method == 'sendLocation':
-                action = 'find_location'
+            # elif method == 'sendLocation':
+            #     action = 'find_location'
 
             if action is not None:
                 req = requests.post(url='https://api.telegram.org/bot%s/sendChatAction' % self.token,
@@ -62,11 +62,20 @@ class CreateTelegramApiClient(object):
                 logger.debug(req.json())
 
     async def send_message(self, method, message):
+        start = int(time.time() * 1000)
         req = requests.post(url='https://api.telegram.org/bot%s/%s' % (self.token, method),
                             data=json.dumps(message),
                             headers={'Content-Type': 'application/json'},
                             timeout=15)
-
+        requests.post('https://www.chatbrick.io/api/log/', data={
+            'brick_id': '',
+            'platform': 'telegram',
+            'start': start,
+            'end': int(time.time() * 1000),
+            'tag': '텔레그램,%s' % method,
+            'data': json.dumps(message),
+            'remark': '텔레그램 메시지호출'
+        })
         return req.json()
 
     @property
@@ -98,6 +107,7 @@ def brick_payload(payload):
         'brick_id': temp[1],
         'command': temp[2]
     }
+
 
 async def refresh_post(request):
     name = request.match_info.get('name', None)
@@ -167,44 +177,82 @@ async def fb_message_poc(chat, fb, entry):
             if 'postback' in messaging:
                 await find_brick(fb, chat, messaging, rep, 'postback', messaging['postback']['payload'])
             elif 'message' in messaging:
+                db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
+                text_input = await db.message_store.find_one({'id': rep.recipient_id,
+                                                              'platform': 'facebook'})
                 if 'quick_reply' in messaging['message']:
                     await find_brick(fb, chat, messaging, rep, 'postback',
                                      messaging['message']['quick_reply']['payload'])
                 elif 'text' in messaging['message']:
-
-                    db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
-                    text_input = await db.message_store.find_one({'id': rep.recipient_id,
-                                                                  'platform': 'facebook'})
                     logger.info('text_input')
                     logger.info(text_input)
                     if text_input:
                         is_final = False
                         final_store_idx = None
+                        is_go_on = False
                         store_len = len(text_input['store'])
                         logger.info(store_len)
                         for idx, store in enumerate(text_input['store']):
                             if store['value'] == '':
-                                logger.info(db.message_store.update_one({'_id': text_input['_id']}, {
-                                    '$set': {'store.%d.value' % idx: messaging['message']['text']}}))
+                                if store.get('type', 'text') == 'text':
+                                    logger.info(db.message_store.update_one({'_id': text_input['_id']}, {
+                                        '$set': {'store.%d.value' % idx: messaging['message']['text'].strip()}}))
 
-                                logger.info(idx)
-                                logger.info(store_len)
-                                if store_len == 1 or ((idx + 1) == store_len):
-                                    is_final = True
-                                else:
-                                    final_store_idx = idx + 1
-                                    logger.info(final_store_idx)
-                                    break
+                                    logger.info(idx)
+                                    logger.info(store_len)
+                                    if store_len == 1 or ((idx + 1) == store_len):
+                                        is_final = True
+                                    else:
+                                        final_store_idx = idx + 1
+                                        logger.info(final_store_idx)
+                                        is_go_on = True
+                                        break
 
                         if is_final:
                             messaging['command'] = 'final'
                             await find_brick(fb, chat, messaging, rep, 'brick', text_input['brick_id'])
-                        else:
+                        elif is_go_on:
                             await fb.send_message(RequestDataFormat(recipient=rep,
-                                                                    message=text_input['store'][final_store_idx]['message'], message_type='RESPONSE'))
+                                                                    message=text_input['store'][final_store_idx][
+                                                                        'message'], message_type='RESPONSE'))
                     else:
                         await find_brick(fb, chat, messaging, rep, 'text',
                                          messaging['message']['text'])
+                elif 'attachments' in messaging['message']:
+                    for attachment in messaging['message']['attachments']:
+                        if attachment['type'] == 'image':
+                            logger.info('text_input')
+                            logger.info(text_input)
+                            if text_input:
+                                is_final = False
+                                final_store_idx = None
+                                is_go_on = False
+                                store_len = len(text_input['store'])
+                                logger.info(store_len)
+                                for idx, store in enumerate(text_input['store']):
+                                    if store['value'] == '':
+                                        if store.get('type', '') == 'image':
+                                            logger.info(db.message_store.update_one({'_id': text_input['_id']}, {
+                                                '$set': {'store.%d.value' % idx: attachment['payload']['url'].strip()}}))
+
+                                            logger.info(idx)
+                                            logger.info(store_len)
+                                            if store_len == 1 or ((idx + 1) == store_len):
+                                                is_final = True
+                                            else:
+                                                final_store_idx = idx + 1
+                                                logger.info(final_store_idx)
+                                                is_go_on = True
+                                                break
+
+                                if is_final:
+                                    messaging['command'] = 'final'
+                                    await find_brick(fb, chat, messaging, rep, 'brick', text_input['brick_id'])
+                                elif is_go_on:
+                                    await fb.send_message(RequestDataFormat(recipient=rep,
+                                                                            message=text_input['store'][final_store_idx][
+                                                                                'message'], message_type='RESPONSE'))
+
     except Exception as e:
         traceback.print_exc()
         logger.error(e)
