@@ -3,6 +3,7 @@ import os
 import requests
 import time
 import motor.motor_asyncio
+import json
 from blueforge.apis.facebook import Recipient, RequestDataFormat
 
 from .emergency import Emergency
@@ -24,6 +25,9 @@ from .personality_insights import PersonalityInsight
 from .whoami import Who
 from .face import Face
 from .emotion import Emotion
+from .tts import Tts
+from .public_jobs import PublicJobs
+from .shortener import Shortener
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +48,10 @@ BRICK = {
     'personality': PersonalityInsight,
     'who': Who,
     'face': Face,
-    'emotion': Emotion
+    'emotion': Emotion,
+    'tts': Tts,
+    'public_jobs': PublicJobs,
+    'shortener': Shortener,
 }
 
 
@@ -64,7 +71,7 @@ class BrickFacebookAPIClient(object):
                 'start': start,
                 'end': int(time.time() * 1000),
                 'tag': '페이스북,여러메시지호출,%s,%s' % (idx, self.rep.recipient_id),
-                'data': RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE').get_data(),
+                'data': json.dumps(RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE').get_data()),
                 'remark': '페이스북 메시지호출'
             })
 
@@ -77,7 +84,7 @@ class BrickFacebookAPIClient(object):
             'start': start,
             'end': int(time.time() * 1000),
             'tag': '페이스북,단건메시지호출,%s' % self.rep.recipient_id,
-            'data': RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE').get_data(),
+            'data': json.dumps(RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE').get_data()),
             'remark': '페이스북 메시지호출'
         })
 
@@ -128,7 +135,7 @@ class BrickInputMessage(object):
         else:
             self.rep = rep
 
-    async def save(self, is_pass=False):
+    async def save(self, is_pass=False, show_msg=True):
         await self.delete()
         input_data = {
             'brick_id': self.brick_data['id'],
@@ -150,6 +157,13 @@ class BrickInputMessage(object):
                         'type': u_input.get('type', 'text'),
                         'value': 'pass'
                     })
+                elif show_msg is False:
+                    input_data['store'].append({
+                        'message': u_input['message'],
+                        'key': u_input['key'],
+                        'type': 'postback',
+                        'value': ''
+                    })
                 else:
                     input_data['store'].append({
                         'message': u_input['message'],
@@ -158,7 +172,7 @@ class BrickInputMessage(object):
                         'value': ''
                     })
 
-                if idx == 0 and is_pass is False:
+                if idx == 0 and is_pass is False and show_msg:
                     await self.fb.send_message(u_input['message'])
 
             logger.info(await self.db.message_store.insert_one(input_data))
@@ -172,6 +186,13 @@ class BrickInputMessage(object):
                         'type': u_input.get('type', 'text'),
                         'value': 'pass'
                     })
+                elif show_msg is False:
+                    input_data['store'].append({
+                        'message': u_input['message'],
+                        'key': u_input['key'],
+                        'type': 'postback',
+                        'value': ''
+                    })
                 else:
                     input_data['store'].append({
                         'message': u_input['tg_message'],
@@ -180,7 +201,7 @@ class BrickInputMessage(object):
                         'value': ''
                     })
 
-                if idx == 0 and is_pass is False:
+                if idx == 0 and is_pass is False and show_msg:
                     await self.fb.send_message(u_input['tg_message'])
 
             logger.info(await self.db.message_store.insert_one(input_data))

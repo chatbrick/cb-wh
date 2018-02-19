@@ -191,15 +191,12 @@ async def fb_message_poc(chat, fb, entry):
                         final_store_idx = None
                         is_go_on = False
                         store_len = len(text_input['store'])
-                        logger.info(store_len)
                         for idx, store in enumerate(text_input['store']):
+                            logger.info(store)
                             if store['value'] == '':
                                 if store.get('type', 'text') == 'text':
                                     logger.info(db.message_store.update_one({'_id': text_input['_id']}, {
                                         '$set': {'store.%d.value' % idx: messaging['message']['text'].strip()}}))
-
-                                    logger.info(idx)
-                                    logger.info(store_len)
                                     if store_len == 1 or ((idx + 1) == store_len):
                                         is_final = True
                                     else:
@@ -207,6 +204,10 @@ async def fb_message_poc(chat, fb, entry):
                                         logger.info(final_store_idx)
                                         is_go_on = True
                                         break
+
+                        if is_go_on:
+                            if text_input['store'][final_store_idx]['value'] != '':
+                                is_final = True
 
                         if is_final:
                             messaging['command'] = 'final'
@@ -233,7 +234,8 @@ async def fb_message_poc(chat, fb, entry):
                                     if store['value'] == '':
                                         if store.get('type', '') == 'image':
                                             logger.info(db.message_store.update_one({'_id': text_input['_id']}, {
-                                                '$set': {'store.%d.value' % idx: attachment['payload']['url'].strip()}}))
+                                                '$set': {
+                                                    'store.%d.value' % idx: attachment['payload']['url'].strip()}}))
 
                                             logger.info(idx)
                                             logger.info(store_len)
@@ -250,7 +252,8 @@ async def fb_message_poc(chat, fb, entry):
                                     await find_brick(fb, chat, messaging, rep, 'brick', text_input['brick_id'])
                                 elif is_go_on:
                                     await fb.send_message(RequestDataFormat(recipient=rep,
-                                                                            message=text_input['store'][final_store_idx][
+                                                                            message=
+                                                                            text_input['store'][final_store_idx][
                                                                                 'message'], message_type='RESPONSE'))
 
     except Exception as e:
@@ -300,7 +303,17 @@ async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value):
             for send_action in brick['actions']:
                 logger.info(send_action)
                 if 'message' in send_action:
+                    start = int(time.time() * 1000)
                     logger.info(await fb.send_message(TempMessage(recipient=rep, message=send_action['message'])))
+                    requests.post('https://www.chatbrick.io/api/log/', data={
+                        'brick_id': '',
+                        'platform': 'telegram',
+                        'start': start,
+                        'end': int(time.time() * 1000),
+                        'tag': '페이스북,단건',
+                        'data': json.dumps(TempMessage(recipient=rep, message=send_action['message']).get_data()),
+                        'remark': '페이스북 단건 메시지호출'
+                    })
 
                 # Actions에서 브릭이 있으면 호출
                 elif 'brick' in send_action:

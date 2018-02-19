@@ -6,7 +6,7 @@ import blueforge.apis.telegram as tg
 import requests
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
 
-from chatbrick.util import get_items_from_xml
+from chatbrick.util import get_items_from_xml, download_and_save_image
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ class SafeJourney(object):
                 send_message = [
                     Message(
                         attachment=ImageAttachment(
-                            url='{imgUrl2}'.format(**items[0])
+                            url=download_and_save_image(items[0]['imgUrl2'])
                         ),
                         quick_replies=QuickReply(
                             quick_reply_items=[
@@ -117,7 +117,7 @@ class SafeJourney(object):
             else:
                 send_message = [
                     tg.SendPhoto(
-                        photo='{imgUrl2}'.format(**items[0]),
+                        photo=download_and_save_image(items[0]['imgUrl2']),
                         reply_markup=tg.MarkUpContainer(
                             inline_keyboard=[
                                 [

@@ -5,7 +5,7 @@ import blueforge.apis.telegram as tg
 import requests
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
 
-from chatbrick.util import get_items_from_xml, remove_html_tag
+from chatbrick.util import get_items_from_xml, remove_html_tag, download_and_save_image
 
 logger = logging.getLogger(__name__)
 
@@ -59,15 +59,11 @@ class Country(object):
                 send_message = [
                     Message(
                         attachment=ImageAttachment(
-                            url='{imgUrl}'.format(**items[0])
+                            url=download_and_save_image(items[0]['imgUrl'])
                         )
                     ),
                     Message(
-                        text='{continent}\n*{countryName}({countryEnName})*\n{basic}'.format(**items[0])
-                    ),
-                    Message(
-                        text='{basic}'.format(
-                            **items[0]),
+                        text='{continent}\n*{countryName}({countryEnName})*\n{basic}'.format(**items[0]),
                         quick_replies=QuickReply(
                             quick_reply_items=[
                                 QuickReplyTextItem(
@@ -125,7 +121,7 @@ class Country(object):
 
                 send_message = [
                     tg.SendPhoto(
-                      photo='{imgUrl}'.format(**items[0])
+                      photo=download_and_save_image(items[0]['imgUrl'])
                     ),
                     tg.SendMessage(
                         text='{continent}\n*{countryName}({countryEnName})*\n{basic}'.format(**items[0]),

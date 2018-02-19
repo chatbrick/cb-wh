@@ -91,6 +91,10 @@ async def tg_message_poc(tg, chat, data):
                                 is_go_on = True
                                 break
 
+                if is_go_on:
+                    if text_input['store'][final_store_idx]['value'] != '':
+                        is_final = True
+
                 if is_final:
                     await find_brick(tg, chat, message, None, brick=text_input['brick_id'], sub_command='final')
                 elif is_go_on:

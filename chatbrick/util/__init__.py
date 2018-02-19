@@ -1,9 +1,14 @@
 import logging
 import re
+import requests
+import uuid
 
 from xml.etree.ElementTree import fromstring
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_IMAGE_FOLDER = '/home/ec2-user/app/chatbrick_admin/src/static/country/'
+DEFAULT_IMAGE_URL = 'https://www.chatbrick.io/api/static/country/'
 
 
 def get_items_from_xml(res):
@@ -32,3 +37,19 @@ def remove_html_tag(raw_html):
     refined_text = refined_text.replace('&nbsp;', ' ')
     refined_text = re.sub(html_filter, '', refined_text)
     return refined_text
+
+
+def download_and_save_image(url):
+    res = requests.get(url)
+    file_name = res.headers['Content-Disposition'].split(sep='=')[-1].strip()
+    with open(DEFAULT_IMAGE_FOLDER+file_name, 'wb') as file:
+        file.write(res.content)
+    return DEFAULT_IMAGE_URL + file_name
+
+
+def save_voice(response):
+    file_name = str(uuid.uuid4())+'.mp3'
+    with open(DEFAULT_IMAGE_FOLDER+file_name, 'wb') as file:
+        file.write(response.content)
+
+    return DEFAULT_IMAGE_URL + file_name
