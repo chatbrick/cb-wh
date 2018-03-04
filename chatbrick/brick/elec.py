@@ -4,7 +4,7 @@ import blueforge.apis.telegram as tg
 import requests
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
 
-from chatbrick.util import get_items_from_xml
+from chatbrick.util import get_items_from_xml, UNKNOWN_ERROR_MSG
 
 logger = logging.getLogger(__name__)
 
@@ -39,39 +39,53 @@ class Electric(object):
 
             items = get_items_from_xml(res)
 
-            if len(items) == 0:
-                send_message = [
-                    Message(
-                        text='조회된 결과가 없습니다.',
-                        quick_replies=QuickReply(
-                            quick_reply_items=[
-                                QuickReplyTextItem(
-                                    title='다른 지역검색',
-                                    payload='brick|electric|get_started'
-                                )
-                            ]
+            if type(items) is dict:
+                if items.get('code', '00') == '99' or items.get('code', '00') == '30':
+                    send_message = [
+                        Message(
+                            text='chatbrick 홈페이지에 올바르지 않은 API key를 입력했어요. 다시 한번 확인해주세요.',
                         )
-                    )
-                ]
+                    ]
+                else:
+                    send_message = [
+                        Message(
+                            text=UNKNOWN_ERROR_MSG
+                        )
+                    ]
             else:
-                sending_message = ''
-                for item in items:
-                    sending_message += '충전소명 : {csNm}\n충전소ID : {cpId}\n충전타입 : {cpNm}\n상태 : {cpStat}\n주소 : {addr}\n\n'.format(
-                        **item)
-
-                send_message = [
-                    Message(
-                        text=sending_message,
-                        quick_replies=QuickReply(
-                            quick_reply_items=[
-                                QuickReplyTextItem(
-                                    title='다른 충전소 검색',
-                                    payload='brick|electric|get_started'
-                                )
-                            ]
+                if len(items) == 0:
+                    send_message = [
+                        Message(
+                            text='조회된 결과가 없습니다.',
+                            quick_replies=QuickReply(
+                                quick_reply_items=[
+                                    QuickReplyTextItem(
+                                        title='다른 지역검색',
+                                        payload='brick|electric|get_started'
+                                    )
+                                ]
+                            )
                         )
-                    )
-                ]
+                    ]
+                else:
+                    sending_message = ''
+                    for item in items:
+                        sending_message += '충전소명 : {csNm}\n충전소ID : {cpId}\n충전타입 : {cpNm}\n상태 : {cpStat}\n주소 : {addr}\n\n'.format(
+                            **item)
+
+                    send_message = [
+                        Message(
+                            text=sending_message,
+                            quick_replies=QuickReply(
+                                quick_reply_items=[
+                                    QuickReplyTextItem(
+                                        title='다른 충전소 검색',
+                                        payload='brick|electric|get_started'
+                                    )
+                                ]
+                            )
+                        )
+                    ]
 
             await self.brick_db.delete()
             await self.fb.send_messages(send_message)
@@ -99,34 +113,48 @@ class Electric(object):
 
             items = get_items_from_xml(res)
 
-            if len(items) == 0:
-                send_message = [
-                    tg.SendMessage(
-                        text='조회된 결과가 없습니다.'
-                    )
-                ]
-            else:
-                sending_message = ''
-                for item in items:
-                    sending_message += '*{csNm}*\n충전소ID : {cpId}\n충전타입 : {cpNm}\n상태 : {cpStat}\n주소 : {addr}\n[구글지도](https://www.google.com/maps/?q={lat},{longi})\n\n'.format(
-                        **item)
-                send_message = [
-                    tg.SendMessage(
-                        text=sending_message,
-                        parse_mode='Markdown',
-                        disable_web_page_preview=True,
-                        reply_markup=tg.MarkUpContainer(
-                            inline_keyboard=[
-                                [
-                                    tg.CallbackButton(
-                                        text='다른 충전소 검색',
-                                        callback_data='BRICK|electric|get_started'
-                                    )
-                                ]
-                            ]
+            if type(items) is dict:
+                if items.get('code', '00') == '99' or items.get('code', '00') == '30':
+                    send_message = [
+                        tg.SendMessage(
+                            text='chatbrick 홈페이지에 올바르지 않은 API key를 입력했어요. 다시 한번 확인해주세요.',
                         )
-                    )
-                ]
+                    ]
+                else:
+                    send_message = [
+                        tg.SendMessage(
+                            text=UNKNOWN_ERROR_MSG
+                        )
+                    ]
+            else:
+                if len(items) == 0:
+                    send_message = [
+                        tg.SendMessage(
+                            text='조회된 결과가 없습니다.'
+                        )
+                    ]
+                else:
+                    sending_message = ''
+                    for item in items:
+                        sending_message += '*{csNm}*\n충전소ID : {cpId}\n충전타입 : {cpNm}\n상태 : {cpStat}\n주소 : {addr}\n[구글지도](https://www.google.com/maps/?q={lat},{longi})\n\n'.format(
+                            **item)
+                    send_message = [
+                        tg.SendMessage(
+                            text=sending_message,
+                            parse_mode='Markdown',
+                            disable_web_page_preview=True,
+                            reply_markup=tg.MarkUpContainer(
+                                inline_keyboard=[
+                                    [
+                                        tg.CallbackButton(
+                                            text='다른 충전소 검색',
+                                            callback_data='BRICK|electric|get_started'
+                                        )
+                                    ]
+                                ]
+                            )
+                        )
+                    ]
 
             await self.brick_db.delete()
             await self.fb.send_messages(send_message)

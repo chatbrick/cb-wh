@@ -44,7 +44,7 @@ class CreateTelegramApiClient(object):
                                         'action': action
                                     }),
                                     headers={'Content-Type': 'application/json'},
-                                    timeout=15)
+                                    timeout=10)
 
                 logger.debug(req.json())
 
@@ -53,7 +53,7 @@ class CreateTelegramApiClient(object):
         req = requests.post(url='https://api.telegram.org/bot%s/%s' % (self.token, method),
                             data=json.dumps(message),
                             headers={'Content-Type': 'application/json'},
-                            timeout=15)
+                            timeout=100)
 
         requests.post('https://www.chatbrick.io/api/log/', data={
             'brick_id': '',

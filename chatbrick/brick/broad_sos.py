@@ -5,7 +5,7 @@ import urllib.parse
 import requests
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
 
-from chatbrick.util import get_items_from_xml, remove_html_tag
+from chatbrick.util import get_items_from_xml, remove_html_tag, UNKNOWN_ERROR_MSG
 
 logger = logging.getLogger(__name__)
 
@@ -40,42 +40,56 @@ class BroadSos(object):
 
             items = get_items_from_xml(res)
 
-            if len(items) == 0:
-                send_message = [
-                    Message(
-                        text='조회된 결과가 없습니다.',
-                        quick_replies=QuickReply(
-                            quick_reply_items=[
-                                QuickReplyTextItem(
-                                    title='다른 국가조회',
-                                    payload='brick|broad_sos|get_started'
-                                )
-                            ]
+            if type(items) is dict:
+                if items.get('code', '00') == '99' or items.get('code', '00') == '30':
+                    send_message = [
+                        Message(
+                            text='chatbrick 홈페이지에 올바르지 않은 API key를 입력했어요. 다시 한번 확인해주세요.',
                         )
-                    )
-                ]
+                    ]
+                else:
+                    send_message = [
+                        Message(
+                            text=UNKNOWN_ERROR_MSG
+                        )
+                    ]
             else:
-                sending_message = []
-                for item in items:
-                    item['contact'] = remove_html_tag(item['contact'])
-                    sending_message.append('국가 : {countryName}\n구분 : {continent}\n내용 : \n{contact}'.format(**item))
-
-                send_message = [
-                    Message(
-                        text='조회된 결과에요'
-                    ),
-                    Message(
-                        text='\n\n'.join(sending_message),
-                        quick_replies=QuickReply(
-                            quick_reply_items=[
-                                QuickReplyTextItem(
-                                    title='다른 국가조회',
-                                    payload='brick|broad_sos|get_started'
-                                )
-                            ]
+                if len(items) == 0:
+                    send_message = [
+                        Message(
+                            text='조회된 결과가 없습니다.',
+                            quick_replies=QuickReply(
+                                quick_reply_items=[
+                                    QuickReplyTextItem(
+                                        title='다른 국가조회',
+                                        payload='brick|broad_sos|get_started'
+                                    )
+                                ]
+                            )
                         )
-                    )
-                ]
+                    ]
+                else:
+                    sending_message = []
+                    for item in items:
+                        item['contact'] = remove_html_tag(item['contact'])
+                        sending_message.append('국가 : {countryName}\n구분 : {continent}\n내용 : \n{contact}'.format(**item))
+
+                    send_message = [
+                        Message(
+                            text='조회된 결과에요'
+                        ),
+                        Message(
+                            text='\n\n'.join(sending_message),
+                            quick_replies=QuickReply(
+                                quick_reply_items=[
+                                    QuickReplyTextItem(
+                                        title='다른 국가조회',
+                                        payload='brick|broad_sos|get_started'
+                                    )
+                                ]
+                            )
+                        )
+                    ]
 
             await self.brick_db.delete()
             await self.fb.send_messages(send_message)
@@ -103,34 +117,48 @@ class BroadSos(object):
 
             items = get_items_from_xml(res)
 
-            if len(items) == 0:
-                send_message = [
-                    tg.SendMessage(
-                        text='조회된 결과가 없습니다.'
-                    )
-                ]
-            else:
-                sending_message = []
-                for item in items:
-                    item['contact'] = remove_html_tag(item['contact'])
-                    sending_message.append('*{countryName}*\n구분 : {continent}\n내용 : \n{contact}'.format(**item))
-
-                send_message = [
-                    tg.SendMessage(
-                        text='\n\n'.join(sending_message),
-                        parse_mode='Markdown',
-                        reply_markup=tg.MarkUpContainer(
-                            inline_keyboard=[
-                                [
-                                    tg.CallbackButton(
-                                        text='다른 국가조회',
-                                        callback_data='BRICK|broad_sos|get_started'
-                                    )
-                                ]
-                            ]
+            if type(items) is dict:
+                if items.get('code', '00') == '99' or items.get('code', '00') == '30':
+                    send_message = [
+                        tg.SendMessage(
+                            text='chatbrick 홈페이지에 올바르지 않은 API key를 입력했어요. 다시 한번 확인해주세요.',
                         )
-                    )
-                ]
+                    ]
+                else:
+                    send_message = [
+                        tg.SendMessage(
+                            text=UNKNOWN_ERROR_MSG
+                        )
+                    ]
+            else:
+                if len(items) == 0:
+                    send_message = [
+                        tg.SendMessage(
+                            text='조회된 결과가 없습니다.'
+                        )
+                    ]
+                else:
+                    sending_message = []
+                    for item in items:
+                        item['contact'] = remove_html_tag(item['contact'])
+                        sending_message.append('*{countryName}*\n구분 : {continent}\n내용 : \n{contact}'.format(**item))
+
+                    send_message = [
+                        tg.SendMessage(
+                            text='\n\n'.join(sending_message),
+                            parse_mode='Markdown',
+                            reply_markup=tg.MarkUpContainer(
+                                inline_keyboard=[
+                                    [
+                                        tg.CallbackButton(
+                                            text='다른 국가조회',
+                                            callback_data='BRICK|broad_sos|get_started'
+                                        )
+                                    ]
+                                ]
+                            )
+                        )
+                    ]
             await self.brick_db.delete()
             await self.fb.send_messages(send_message)
         return None

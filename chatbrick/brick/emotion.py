@@ -64,6 +64,7 @@ class Emotion(object):
             requests.post('https://www.chatbrick.io/api/log/', data={
                 'brick_id': 'emotion',
                 'platform': 'facebook',
+                'fb_id': self.fb.rep.recipient_id,
                 'start': start,
                 'end': int(time.time() * 1000),
                 'tag': '페이스북,페이스,API,내기분어때,감정',
@@ -73,7 +74,7 @@ class Emotion(object):
 
             logger.info(res)
 
-            if res.get('error', False):
+            if type(res) is dict and res.get('error', False):
                 send_message = [
                     Message(
                         text='[에러발생]\nCode: {code}\nMessage: {message}\n\n관리자에게 문의 바랍니다.\ndevops@bluehack.net'.format(
@@ -159,7 +160,7 @@ class Emotion(object):
 
             logger.info(res)
 
-            if res.get('error', False):
+            if type(res) is dict and res.get('error', False):
                 send_message = [
                     tg.SendMessage(
                         text='*[에러발생]*\nCode: {code}\nMessage: {message}\n\n관리자에게 문의 바랍니다.\ndevops@bluehack.net'.format(

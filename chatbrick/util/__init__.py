@@ -9,13 +9,47 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_IMAGE_FOLDER = '/home/ec2-user/app/chatbrick_admin/src/static/country/'
 DEFAULT_IMAGE_URL = 'https://www.chatbrick.io/api/static/country/'
+UNKNOWN_ERROR_MSG = '에러가 발생하였어요.\n잠시후 다시 시도해주세요.'
 
 
 def get_items_from_xml(res):
+    is_error = False
     items = []
+    error_item = {}
     try:
         parsed_result = fromstring(res.text)
         for item in parsed_result.getchildren():
+            try:
+                if item.tag == 'cmmMsgHeader':
+                    is_error = True
+                    for sub_item in item.getchildren():
+                        if sub_item.tag == 'returnReasonCode':
+                            error_item['code'] = sub_item.text
+                        elif sub_item.tag == 'returnAuthMsg':
+                            error_item['msg'] = sub_item.text
+
+                if item.tag == 'header':
+                    for sub_item in item.getchildren():
+                        if sub_item.tag == 'resultCode':
+                            if sub_item.text != '00':
+                                is_error = True
+                            error_item['code'] = sub_item.text
+                        elif sub_item.tag == 'resultMsg':
+                            error_item['msg'] = sub_item.text
+
+            except Exception as ex:
+                logger.error(ex)
+
+            if is_error:
+                requests.post('https://www.chatbrick.io/api/log/error/', json={
+                    'type': 'brick',
+                    'service': 'data.go.kr',
+                    'url': res.url,
+                    'data': error_item
+                })
+
+                return error_item
+
             if item.tag == 'body':
                 for sub_item in item.getchildren():
                     if sub_item.tag == 'items':
@@ -42,14 +76,14 @@ def remove_html_tag(raw_html):
 def download_and_save_image(url):
     res = requests.get(url)
     file_name = res.headers['Content-Disposition'].split(sep='=')[-1].strip()
-    with open(DEFAULT_IMAGE_FOLDER+file_name, 'wb') as file:
+    with open(DEFAULT_IMAGE_FOLDER + file_name, 'wb') as file:
         file.write(res.content)
     return DEFAULT_IMAGE_URL + file_name
 
 
 def save_voice(response):
-    file_name = str(uuid.uuid4())+'.mp3'
-    with open(DEFAULT_IMAGE_FOLDER+file_name, 'wb') as file:
+    file_name = str(uuid.uuid4()) + '.mp3'
+    with open(DEFAULT_IMAGE_FOLDER + file_name, 'wb') as file:
         file.write(response.content)
 
     return DEFAULT_IMAGE_URL + file_name

@@ -28,6 +28,9 @@ from .emotion import Emotion
 from .tts import Tts
 from .public_jobs import PublicJobs
 from .shortener import Shortener
+from .currency import Currency
+
+FILE_DIR = '/home/ec2-user/app/chatbrick_main/src'
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +55,14 @@ BRICK = {
     'tts': Tts,
     'public_jobs': PublicJobs,
     'shortener': Shortener,
+    'currency': Currency,
 }
+BRICK_DEFAULT_CONFIG = {}
+
+if len(BRICK_DEFAULT_CONFIG.keys()) == 0:
+    with open(os.path.join(os.path.join(FILE_DIR, 'data'), 'default_api.json')) as file:
+        brick_data = json.loads(file.read())
+        BRICK_DEFAULT_CONFIG = brick_data
 
 
 class BrickFacebookAPIClient(object):
@@ -69,9 +79,11 @@ class BrickFacebookAPIClient(object):
                 'brick_id': '',
                 'platform': 'facebook',
                 'start': start,
+                'fb_id': self.rep.recipient_id,
                 'end': int(time.time() * 1000),
                 'tag': '페이스북,여러메시지호출,%s,%s' % (idx, self.rep.recipient_id),
-                'data': json.dumps(RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE').get_data()),
+                'data': json.dumps(
+                    RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE').get_data()),
                 'remark': '페이스북 메시지호출'
             })
 
@@ -83,8 +95,10 @@ class BrickFacebookAPIClient(object):
             'platform': 'facebook',
             'start': start,
             'end': int(time.time() * 1000),
+            'fb_id': self.rep.recipient_id,
             'tag': '페이스북,단건메시지호출,%s' % self.rep.recipient_id,
-            'data': json.dumps(RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE').get_data()),
+            'data': json.dumps(
+                RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE').get_data()),
             'remark': '페이스북 메시지호출'
         })
 
@@ -140,7 +154,7 @@ class BrickInputMessage(object):
         input_data = {
             'brick_id': self.brick_data['id'],
             'id': self.rep,
-            'data': self.brick_data.get('data', []),
+            'data': self.brick_data.get('data', {}),
             'platform': self.platform,
             'store': []
         }
@@ -231,6 +245,13 @@ async def find_custom_brick(client, platform, brick_id, command, brick_data, msg
     if brick_config is not None:
         if brick_config.get(brick_id, False):
             brick_data['data'] = brick_config[brick_id]
+
+    if BRICK_DEFAULT_CONFIG.get(brick_id, False):
+        logger.info('기본 API Key로 변경')
+        brick_default_data = BRICK_DEFAULT_CONFIG[brick_id]
+        for key in brick_default_data.keys():
+            if brick_data['data'][key] == '':
+                brick_data['data'][key] = brick_default_data[key]
 
     logger.info('find_custom_brick/brick_config')
     logger.info(brick_config)

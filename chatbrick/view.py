@@ -180,6 +180,7 @@ async def fb_message_poc(chat, fb, entry):
                 db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
                 text_input = await db.message_store.find_one({'id': rep.recipient_id,
                                                               'platform': 'facebook'})
+                is_not_find = True
                 if 'quick_reply' in messaging['message']:
                     await find_brick(fb, chat, messaging, rep, 'postback',
                                      messaging['message']['quick_reply']['payload'])
@@ -195,6 +196,7 @@ async def fb_message_poc(chat, fb, entry):
                             logger.info(store)
                             if store['value'] == '':
                                 if store.get('type', 'text') == 'text':
+                                    is_not_find = False
                                     logger.info(db.message_store.update_one({'_id': text_input['_id']}, {
                                         '$set': {'store.%d.value' % idx: messaging['message']['text'].strip()}}))
                                     if store_len == 1 or ((idx + 1) == store_len):
@@ -216,6 +218,7 @@ async def fb_message_poc(chat, fb, entry):
                             await fb.send_message(RequestDataFormat(recipient=rep,
                                                                     message=text_input['store'][final_store_idx][
                                                                         'message'], message_type='RESPONSE'))
+
                     else:
                         await find_brick(fb, chat, messaging, rep, 'text',
                                          messaging['message']['text'])
@@ -265,15 +268,18 @@ async def fb_message_poc(chat, fb, entry):
 async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value):
     logger.info(brick_type)
     logger.info(value)
+    is_not_find = True
     await fb.set_typing_on(rep)
     # 브릭을 통한 진행은 여기서 진행함
     if brick_type == 'brick':
+        is_not_find = False
         await find_custom_brick(client=fb, platform='facebook', brick_id=value,
                                 command='final', brick_data={'id': value},
                                 msg_data=raw_msg_data, brick_config=chat.get('brick_data', None))
 
     # payload가 브릭과 관련된 경우인지 확인하는 부분
     if brick_type == 'postback' and value.startswith('brick|'):
+        is_not_find = False
         brick_payalod_cmd = brick_payload(value)
         await find_custom_brick(client=fb, platform='facebook', brick_id=brick_payalod_cmd['brick_id'],
                                 command=brick_payalod_cmd['command'], brick_data={'id': brick_payalod_cmd['brick_id']},
@@ -282,6 +288,7 @@ async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value):
     # 일반적인 경우에는 여기서 진행함 - 미리 만들어진 시나리오를 통해 동작하는 경우
     for brick in chat['bricks']:
         if brick['type'] == brick_type and brick['value'] == value:
+            is_not_find = False
             is_pass = False
             if brick.get('conditions', False) and len(brick['conditions']):
                 for brick_condition in brick['conditions']:
@@ -322,6 +329,11 @@ async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value):
                                                 command='get_started', brick_data=send_action['brick'],
                                                 msg_data=raw_msg_data, brick_config=chat.get('brick_data', None)))
             break
+
+    if is_not_find:
+        logger.info(await fb.send_message(TempMessage(recipient=rep, message={
+            'text': chat['settings']['data']['custom_settings'].get('error_msg', '알수가 없네요.')
+        })))
 
     await fb.set_mark_seen(rep)
     await fb.set_typing_off(rep)

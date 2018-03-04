@@ -8,7 +8,7 @@ from dateutil.relativedelta import relativedelta
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem, TemplateAttachment, \
     Element, GenericTemplate, PostBackButton, ButtonTemplate
 
-from chatbrick.util import get_items_from_xml
+from chatbrick.util import get_items_from_xml, UNKNOWN_ERROR_MSG
 
 logger = logging.getLogger(__name__)
 
@@ -105,13 +105,66 @@ class Holiday(object):
 
             items = get_items_from_xml(res)
 
-            if len(items) == 0:
-                if command == 'prev_month' or command == 'this_month':
+            if type(items) is dict:
+                if items.get('code', '00') == '99' or items.get('code', '00') == '30':
+                    send_message = [
+                        Message(
+                            text='chatbrick 홈페이지에 올바르지 않은 API key를 입력했어요. 다시 한번 확인해주세요.',
+                        )
+                    ]
+                else:
+                    send_message = [
+                        Message(
+                            text=UNKNOWN_ERROR_MSG
+                        )
+                    ]
+            else:
+                if len(items) == 0:
+                    if command == 'prev_month' or command == 'this_month':
+                        send_message = [
+                            Message(
+                                attachment=TemplateAttachment(
+                                    payload=ButtonTemplate(
+                                        text='%s-%s\n조회된 결과가 없습니다.' % (year, month),
+                                        buttons=[
+                                            PostBackButton(
+                                                title='이전달 조회',
+                                                payload='brick|holiday|prev_month'
+                                            ),
+                                            PostBackButton(
+                                                title='다음달 조회',
+                                                payload='brick|holiday|next_month'
+                                            )
+                                        ]
+                                    )
+                                )
+                            )
+                        ]
+                    else:
+                        send_message = [
+                            Message(
+                                text='조회된 결과가 없습니다.',
+                                quick_replies=QuickReply(
+                                    quick_reply_items=[
+                                        QuickReplyTextItem(
+                                            title='다른 달 조회하기',
+                                            payload='brick|holiday|get_started'
+                                        )
+                                    ]
+                                )
+                            )
+                        ]
+
+                else:
+                    sending_message = []
+                    for item in items:
+                        sending_message.append('날짜: {locdate}\n공휴일 유무: {isHoliday}\n공휴일 내용: {dateName}'.format(**item))
+
                     send_message = [
                         Message(
                             attachment=TemplateAttachment(
                                 payload=ButtonTemplate(
-                                    text='%s-%s\n조회된 결과가 없습니다.' % (year, month),
+                                    text='\n\n'.join(sending_message),
                                     buttons=[
                                         PostBackButton(
                                             title='이전달 조회',
@@ -126,45 +179,6 @@ class Holiday(object):
                             )
                         )
                     ]
-                else:
-                    send_message = [
-                        Message(
-                            text='조회된 결과가 없습니다.',
-                            quick_replies=QuickReply(
-                                quick_reply_items=[
-                                    QuickReplyTextItem(
-                                        title='다른 달 조회하기',
-                                        payload='brick|holiday|get_started'
-                                    )
-                                ]
-                            )
-                        )
-                    ]
-
-            else:
-                sending_message = []
-                for item in items:
-                    sending_message.append('날짜: {locdate}\n공휴일 유무: {isHoliday}\n공휴일 내용: {dateName}'.format(**item))
-
-                send_message = [
-                    Message(
-                        attachment=TemplateAttachment(
-                            payload=ButtonTemplate(
-                                text='\n\n'.join(sending_message),
-                                buttons=[
-                                    PostBackButton(
-                                        title='이전달 조회',
-                                        payload='brick|holiday|prev_month'
-                                    ),
-                                    PostBackButton(
-                                        title='다음달 조회',
-                                        payload='brick|holiday|next_month'
-                                    )
-                                ]
-                            )
-                        )
-                    )
-                ]
             await self.fb.send_messages(send_message)
         return None
 
@@ -235,11 +249,68 @@ class Holiday(object):
 
             items = get_items_from_xml(res)
 
-            if len(items) == 0:
-                if command == 'prev_month' or command == 'this_month':
+            if type(items) is dict:
+                if items.get('code', '00') == '99' or items.get('code', '00') == '30':
                     send_message = [
                         tg.SendMessage(
-                            text='*%s년 %s월*\n조회된 결과가 없습니다.' % (year, month),
+                            text='chatbrick 홈페이지에 올바르지 않은 API key를 입력했어요. 다시 한번 확인해주세요.',
+                        )
+                    ]
+                else:
+                    send_message = [
+                        tg.SendMessage(
+                            text=UNKNOWN_ERROR_MSG
+                        )
+                    ]
+            else:
+                if len(items) == 0:
+                    if command == 'prev_month' or command == 'this_month':
+                        send_message = [
+                            tg.SendMessage(
+                                text='*%s년 %s월*\n조회된 결과가 없습니다.' % (year, month),
+                                parse_mode='Markdown',
+                                reply_markup=tg.MarkUpContainer(
+                                    inline_keyboard=[
+                                        [
+                                            tg.CallbackButton(
+                                                text='이전달 조회',
+                                                callback_data='BRICK|holiday|prev_month'
+                                            ),
+                                            tg.CallbackButton(
+                                                text='이전달 조회',
+                                                callback_data='BRICK|holiday|next_month'
+                                            )
+                                        ]
+                                    ]
+                                )
+                            )
+                        ]
+                    else:
+                        send_message = [
+                            tg.SendMessage(
+                                text='*%s년 %s월*\n조회된 결과가 없습니다.' % (year, month),
+                                parse_mode='Markdown',
+                                reply_markup=tg.MarkUpContainer(
+                                    inline_keyboard=[
+                                        [
+                                            tg.CallbackButton(
+                                                text='다른 달 조회하기',
+                                                callback_data='BRICK|holiday|get_started'
+                                            )
+                                        ]
+                                    ]
+                                )
+                            )
+                        ]
+                else:
+                    sending_message = []
+                    for item in items:
+                        sending_message.append('*{locdate}*\n공휴일 유무: {isHoliday}\n공휴일 내용: {dateName}'.format(**item))
+
+
+                    send_message = [
+                        tg.SendMessage(
+                            text='\n\n'.join(sending_message),
                             parse_mode='Markdown',
                             reply_markup=tg.MarkUpContainer(
                                 inline_keyboard=[
@@ -247,9 +318,11 @@ class Holiday(object):
                                         tg.CallbackButton(
                                             text='이전달 조회',
                                             callback_data='BRICK|holiday|prev_month'
-                                        ),
+                                        )
+                                    ],
+                                    [
                                         tg.CallbackButton(
-                                            text='이전달 조회',
+                                            text='다음달 조회',
                                             callback_data='BRICK|holiday|next_month'
                                         )
                                     ]
@@ -257,51 +330,6 @@ class Holiday(object):
                             )
                         )
                     ]
-                else:
-                    send_message = [
-                        tg.SendMessage(
-                            text='*%s년 %s월*\n조회된 결과가 없습니다.' % (year, month),
-                            parse_mode='Markdown',
-                            reply_markup=tg.MarkUpContainer(
-                                inline_keyboard=[
-                                    [
-                                        tg.CallbackButton(
-                                            text='다른 달 조회하기',
-                                            callback_data='BRICK|holiday|get_started'
-                                        )
-                                    ]
-                                ]
-                            )
-                        )
-                    ]
-            else:
-                sending_message = []
-                for item in items:
-                    sending_message.append('*{locdate}*\n공휴일 유무: {isHoliday}\n공휴일 내용: {dateName}'.format(**item))
-
-
-                send_message = [
-                    tg.SendMessage(
-                        text='\n\n'.join(sending_message),
-                        parse_mode='Markdown',
-                        reply_markup=tg.MarkUpContainer(
-                            inline_keyboard=[
-                                [
-                                    tg.CallbackButton(
-                                        text='이전달 조회',
-                                        callback_data='BRICK|holiday|prev_month'
-                                    )
-                                ],
-                                [
-                                    tg.CallbackButton(
-                                        text='다음달 조회',
-                                        callback_data='BRICK|holiday|next_month'
-                                    )
-                                ]
-                            ]
-                        )
-                    )
-                ]
 
             await self.fb.send_messages(send_message)
         return None

@@ -7,7 +7,7 @@ import dateutil.parser
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem, TemplateAttachment, \
     GenericTemplate, Element, PostBackButton
 
-from chatbrick.util import get_items_from_xml
+from chatbrick.util import get_items_from_xml, UNKNOWN_ERROR_MSG
 
 logger = logging.getLogger(__name__)
 
@@ -125,26 +125,24 @@ class Train(object):
             train_type = input_data['store'][3]['value']
             start = int(time.time() * 1000)
 
-            res = requests.get(
-                url='http://openapi.tago.go.kr/openapi/service/TrainInfoService/getStrtpntAlocFndTrainInfo?serviceKey=%s&numOfRows=500&pageSize=500&pageNo=1&startPage=1&depPlaceId=%s&arrPlaceId=%s&depPlandTime=%s&trainGradeCode=%s' % (
-                    input_data['data']['api_key'], STATION[departure_station], STATION[destination_station],
-                    departure_date, train_type))
-
-            items = get_items_from_xml(res)
-            requests.post('https://www.chatbrick.io/api/log/', data={
-                'brick_id': 'train',
-                'platform': 'facebook',
-                'start': start,
-                'end': int(time.time() * 1000),
-                'tag': '페이스북,철도,시간,조회,API',
-                'data': items,
-                'remark': '철도 시간표 조회 API 호출'
-            })
-
-            if len(items) == 0:
+            if STATION.get(departure_station) is None:
                 send_message = [
                     Message(
-                        text='조회된 결과가 없습니다.',
+                        text='출발역이 조회할 수 없는 역입니다.',
+                        quick_replies=QuickReply(
+                            quick_reply_items=[
+                                QuickReplyTextItem(
+                                    title='다시 검색하기',
+                                    payload='brick|train|show_data'
+                                )
+                            ]
+                        )
+                    )
+                ]
+            elif STATION.get(destination_station) is None:
+                send_message = [
+                    Message(
+                        text='도착역이 조회할 수 없는 역입니다.',
                         quick_replies=QuickReply(
                             quick_reply_items=[
                                 QuickReplyTextItem(
@@ -156,33 +154,78 @@ class Train(object):
                     )
                 ]
             else:
-                result_message = '{depplacename} -> {arrplacename}\n\n'.format(**items[0])
-                for item in items:
-                    departure_train_datetime = dateutil.parser.parse(item['depplandtime'])
-                    arrive_train_datetime = dateutil.parser.parse(item['arrplandtime'])
-                    gap = Train.days_hours_minutes(arrive_train_datetime - departure_train_datetime)
+                res = requests.get(
+                    url='http://openapi.tago.go.kr/openapi/service/TrainInfoService/getStrtpntAlocFndTrainInfo?serviceKey=%s&numOfRows=500&pageSize=500&pageNo=1&startPage=1&depPlaceId=%s&arrPlaceId=%s&depPlandTime=%s&trainGradeCode=%s' % (
+                        input_data['data']['api_key'], STATION[departure_station], STATION[destination_station],
+                        departure_date, train_type))
 
-                    item['fromtodatetime'] = '%02d:%02d -> %02d:%02d' % (
-                        departure_train_datetime.hour, departure_train_datetime.minute, arrive_train_datetime.hour,
-                        arrive_train_datetime.minute)
-                    item['time_delta'] = '%02d:%02d' % (gap[0], gap[1])
-                    item['adultcharge_formmated'] = format(int(item['adultcharge']), ',')
-                    result_message += '{traingradename} {fromtodatetime}    {time_delta}    {adultcharge_formmated}\n'.format(
-                        **item)
+                items = get_items_from_xml(res)
+                requests.post('https://www.chatbrick.io/api/log/', data={
+                    'brick_id': 'train',
+                    'platform': 'facebook',
+                    'start': start,
+                    'end': int(time.time() * 1000),
+                    'tag': '페이스북,철도,시간,조회,API',
+                    'data': items,
+                    'remark': '철도 시간표 조회 API 호출'
+                })
 
-                send_message = [
-                    Message(
-                        text=result_message,
-                        quick_replies=QuickReply(
-                            quick_reply_items=[
-                                QuickReplyTextItem(
-                                    title='다시 검색하기',
-                                    payload='brick|train|get_started'
+                if type(items) is dict:
+                    if items.get('code', '00') == '99' or items.get('code', '00') == '30':
+                        send_message = [
+                            Message(
+                                text='chatbrick 홈페이지에 올바르지 않은 API key를 입력했어요. 다시 한번 확인해주세요.',
+                            )
+                        ]
+                    else:
+                        send_message = [
+                            Message(
+                                text=UNKNOWN_ERROR_MSG
+                            )
+                        ]
+                else:
+                    if len(items) == 0:
+                        send_message = [
+                            Message(
+                                text='조회된 결과가 없습니다.',
+                                quick_replies=QuickReply(
+                                    quick_reply_items=[
+                                        QuickReplyTextItem(
+                                            title='다시 검색하기',
+                                            payload='brick|train|show_data'
+                                        )
+                                    ]
                                 )
-                            ]
-                        )
-                    )
-                ]
+                            )
+                        ]
+                    else:
+                        result_message = '{depplacename} -> {arrplacename}\n\n'.format(**items[0])
+                        for item in items:
+                            departure_train_datetime = dateutil.parser.parse(item['depplandtime'])
+                            arrive_train_datetime = dateutil.parser.parse(item['arrplandtime'])
+                            gap = Train.days_hours_minutes(arrive_train_datetime - departure_train_datetime)
+
+                            item['fromtodatetime'] = '%02d:%02d -> %02d:%02d' % (
+                                departure_train_datetime.hour, departure_train_datetime.minute, arrive_train_datetime.hour,
+                                arrive_train_datetime.minute)
+                            item['time_delta'] = '%02d:%02d' % (gap[0], gap[1])
+                            item['adultcharge_formmated'] = format(int(item['adultcharge']), ',')
+                            result_message += '{traingradename} {fromtodatetime}    {time_delta}    {adultcharge_formmated}\n'.format(
+                                **item)
+
+                        send_message = [
+                            Message(
+                                text=result_message,
+                                quick_replies=QuickReply(
+                                    quick_reply_items=[
+                                        QuickReplyTextItem(
+                                            title='다시 검색하기',
+                                            payload='brick|train|get_started'
+                                        )
+                                    ]
+                                )
+                            )
+                        ]
 
             await self.brick_db.delete()
             await self.fb.send_messages(send_message)
@@ -220,27 +263,26 @@ class Train(object):
             train_type = input_data['store'][3]['value']
             start = int(time.time() * 1000)
 
-            res = requests.get(
-                url='http://openapi.tago.go.kr/openapi/service/TrainInfoService/getStrtpntAlocFndTrainInfo?serviceKey=%s&numOfRows=500&pageSize=500&pageNo=1&startPage=1&depPlaceId=%s&arrPlaceId=%s&depPlandTime=%s&trainGradeCode=%s' % (
-                    input_data['data']['api_key'], STATION[departure_station], STATION[destination_station],
-                    departure_date, train_type))
-
-            items = get_items_from_xml(res)
-
-            requests.post('https://www.chatbrick.io/api/log/', data={
-                'brick_id': 'train',
-                'platform': 'telegram',
-                'start': start,
-                'end': int(time.time() * 1000),
-                'tag': '페이스북,철도,시간,조회,API',
-                'data': items,
-                'remark': '철도 시간표 조회 API 호출'
-            })
-
-            if len(items) == 0:
+            if STATION.get(departure_station) is None:
                 send_message = [
                     tg.SendMessage(
-                        text='조회된 결과가 없습니다.',
+                        text='출발역이 조회할 수 없는 역입니다.',
+                        reply_markup=tg.MarkUpContainer(
+                            inline_keyboard=[
+                                [
+                                    tg.CallbackButton(
+                                        text='다시 조회하기',
+                                        callback_data='BRICK|train|show_data'
+                                    )
+                                ]
+                            ]
+                        )
+                    )
+                ]
+            elif STATION.get(destination_station) is None:
+                send_message = [
+                    tg.SendMessage(
+                        text='도착역이 조회할 수 없는 역입니다.',
                         reply_markup=tg.MarkUpContainer(
                             inline_keyboard=[
                                 [
@@ -254,36 +296,85 @@ class Train(object):
                     )
                 ]
             else:
-                result_message = '*{depplacename} -> {arrplacename}*\n\n'.format(**items[0])
-                for item in items:
-                    departure_train_datetime = dateutil.parser.parse(item['depplandtime'])
-                    arrive_train_datetime = dateutil.parser.parse(item['arrplandtime'])
-                    gap = Train.days_hours_minutes(arrive_train_datetime - departure_train_datetime)
+                res = requests.get(
+                    url='http://openapi.tago.go.kr/openapi/service/TrainInfoService/getStrtpntAlocFndTrainInfo?serviceKey=%s&numOfRows=500&pageSize=500&pageNo=1&startPage=1&depPlaceId=%s&arrPlaceId=%s&depPlandTime=%s&trainGradeCode=%s' % (
+                        input_data['data']['api_key'], STATION[departure_station], STATION[destination_station],
+                        departure_date, train_type))
 
-                    item['fromtodatetime'] = '%02d:%02d -> %02d:%02d' % (
-                        departure_train_datetime.hour, departure_train_datetime.minute, arrive_train_datetime.hour,
-                        arrive_train_datetime.minute)
-                    item['time_delta'] = '%02d:%02d' % (gap[0], gap[1])
-                    item['adultcharge_formmated'] = format(int(item['adultcharge']), ',')
-                    result_message += '{traingradename} {fromtodatetime}    {time_delta}    {adultcharge_formmated}\n'.format(
-                        **item)
+                items = get_items_from_xml(res)
 
-                send_message = [
-                    tg.SendMessage(
-                        text=result_message,
-                        parse_mode='Markdown',
-                        reply_markup=tg.MarkUpContainer(
-                            inline_keyboard=[
-                                [
-                                    tg.CallbackButton(
-                                        text='다시 조회하기',
-                                        callback_data='BRICK|train|show_data'
-                                    )
-                                ]
-                            ]
-                        )
-                    )
-                ]
+
+                requests.post('https://www.chatbrick.io/api/log/', data={
+                    'brick_id': 'train',
+                    'platform': 'telegram',
+                    'start': start,
+                    'end': int(time.time() * 1000),
+                    'tag': '페이스북,철도,시간,조회,API',
+                    'data': items,
+                    'remark': '철도 시간표 조회 API 호출'
+                })
+
+                if type(items) is dict:
+                    if items.get('code', '00') == '99' or items.get('code', '00') == '30':
+                        send_message = [
+                            tg.SendMessage(
+                                text='chatbrick 홈페이지에 올바르지 않은 API key를 입력했어요. 다시 한번 확인해주세요.',
+                            )
+                        ]
+                    else:
+                        send_message = [
+                            tg.SendMessage(
+                                text=UNKNOWN_ERROR_MSG
+                            )
+                        ]
+                else:
+                    if len(items) == 0:
+                        send_message = [
+                            tg.SendMessage(
+                                text='조회된 결과가 없습니다.',
+                                reply_markup=tg.MarkUpContainer(
+                                    inline_keyboard=[
+                                        [
+                                            tg.CallbackButton(
+                                                text='다시 조회하기',
+                                                callback_data='BRICK|train|show_data'
+                                            )
+                                        ]
+                                    ]
+                                )
+                            )
+                        ]
+                    else:
+                        result_message = '*{depplacename} -> {arrplacename}*\n\n'.format(**items[0])
+                        for item in items:
+                            departure_train_datetime = dateutil.parser.parse(item['depplandtime'])
+                            arrive_train_datetime = dateutil.parser.parse(item['arrplandtime'])
+                            gap = Train.days_hours_minutes(arrive_train_datetime - departure_train_datetime)
+
+                            item['fromtodatetime'] = '%02d:%02d -> %02d:%02d' % (
+                                departure_train_datetime.hour, departure_train_datetime.minute, arrive_train_datetime.hour,
+                                arrive_train_datetime.minute)
+                            item['time_delta'] = '%02d:%02d' % (gap[0], gap[1])
+                            item['adultcharge_formmated'] = format(int(item['adultcharge']), ',')
+                            result_message += '{traingradename} {fromtodatetime}    {time_delta}    {adultcharge_formmated}\n'.format(
+                                **item)
+
+                        send_message = [
+                            tg.SendMessage(
+                                text=result_message,
+                                parse_mode='Markdown',
+                                reply_markup=tg.MarkUpContainer(
+                                    inline_keyboard=[
+                                        [
+                                            tg.CallbackButton(
+                                                text='다시 조회하기',
+                                                callback_data='BRICK|train|show_data'
+                                            )
+                                        ]
+                                    ]
+                                )
+                            )
+                        ]
             await self.brick_db.delete()
             await self.fb.send_messages(send_message)
         return None

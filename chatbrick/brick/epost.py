@@ -114,6 +114,7 @@ class EPost(object):
             parsed_data = res.json()
             items = []
 
+
             if parsed_data.get('LongitudinalDomesticListResponse', False):
 
                 if parsed_data['LongitudinalDomesticListResponse']['cmmMsgHeader']['successYN'] == 'Y':

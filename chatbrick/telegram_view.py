@@ -74,7 +74,7 @@ async def tg_message_poc(tg, chat, data):
                 is_go_on = False
                 final_store_idx = None
                 store_len = len(text_input['store'])
-                logger.info(store_len)
+
                 for idx, store in enumerate(text_input['store']):
                     if store['value'] == '':
                         if store.get('type', 'text') == 'text':
@@ -102,6 +102,11 @@ async def tg_message_poc(tg, chat, data):
                     action_message['chat_id'] = message['from']['id']
                     logger.info(await tg.send_message(text_input['store'][final_store_idx]['message']['method'],
                                                       action_message))
+
+            if not is_go_on and not is_final:
+                commands['value'] = data['message']['text']
+                await find_brick(tg, chat, message, 'text', **commands)
+
         elif 'photo' in data['message'] and is_go:
             logger.info('Photo!!')
 
@@ -147,6 +152,8 @@ async def tg_message_poc(tg, chat, data):
                     action_message['chat_id'] = message['from']['id']
                     logger.info(await tg.send_message(text_input['store'][final_store_idx]['message']['method'],
                                                       action_message))
+
+
         # if 'attatchments' in data['message'] and
 
     elif 'callback_query' in data:
@@ -171,14 +178,16 @@ async def find_brick(tg, chat, raw_message, brick_type, **kwargs):
     logger.info(brick_type)
     logger.info(kwargs)
     brick_data = chat.get('brick_data', None)
-
+    is_not_find = True
     if 'brick' in kwargs:
+        is_not_find = False
         await find_custom_brick(client=tg, platform='telegram', brick_id=kwargs['brick'],
                                 command=kwargs['sub_command'], brick_data={'id': kwargs['brick']},
                                 msg_data=raw_message, brick_config=brick_data)
     else:
         for brick in chat['telegram']['bricks']:
             if brick['type'] == brick_type and brick['value'] == kwargs['value']:
+                is_not_find = False
                 if kwargs.get('seq', False):
                     action = brick['edits'][int(kwargs['seq'])]
                     send_message = action['message']
@@ -199,3 +208,10 @@ async def find_brick(tg, chat, raw_message, brick_type, **kwargs):
                                                         brick_id=action['brick']['id'],
                                                         command='get_started', brick_data=action['brick'],
                                                         msg_data=raw_message, brick_config=brick_data))
+
+    if is_not_find:
+        send_message = {
+            'chat_id': raw_message['from']['id'],
+            'text': chat['settings']['data']['custom_settings'].get('error_msg', '알수가 없네요.')
+        }
+        await tg.send_message('sendMessage', send_message)
