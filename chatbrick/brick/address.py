@@ -3,6 +3,8 @@ import logging
 import blueforge.apis.telegram as tg
 import requests
 import urllib.parse
+
+import time
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem, TemplateAttachment, \
     GenericTemplate, Element, PostBackButton
 
@@ -20,6 +22,7 @@ class Address(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+            start = int(time.time() * 1000)
             send_message = [
                 Message(
                     attachment=ImageAttachment(
@@ -29,41 +32,23 @@ class Address(object):
                 Message(
                     text='인터넷우체국팀에서 제공하는 "우편번호찾기 서비스"에요.'
                 )
-                # ),
-                # Message(
-                #     attachment=TemplateAttachment(
-                #         payload=GenericTemplate(
-                #             elements=[
-                #                 Element(
-                #                     image_url='https://www.chatbrick.io/api/static/brick/img_brick_08_002.png',
-                #                     title='도로명주소로 찾기',
-                #                     subtitle='도로명주소로 우편번호를 찾을 수 있어요.',
-                #                     buttons=[
-                #                         PostBackButton(
-                #                             title='도로명주소로 검색',
-                #                             payload='brick|address|road'
-                #                         )
-                #                     ]
-                #                 ),
-                #                 Element(
-                #                     image_url='https://www.chatbrick.io/api/static/brick/img_brick_08_002.png',
-                #                     title='지번주소로 찾기',
-                #                     subtitle='지번주소로 우편번호를 찾을 수 있어요.',
-                #                     buttons=[
-                #                         PostBackButton(
-                #                             title='지번주소로 검색',
-                #                             payload='brick|address|old'
-                #                         )
-                #                     ]
-                #                 )
-                #             ]
-                #         )
-                #     )
-                # )
             ]
+
             await self.fb.send_messages(send_message)
             await self.brick_db.save()
+            requests.put('https://www.chatbrick.io/api/log/', json={
+                'log_id': self.brick_db.log_id,
+                'user_id': self.brick_db.user_id,
+                'os': '',
+                'application': 'facebook',
+                'api_code': 'send_message',
+                'api_provider_code': 'facebook',
+                'origin': 'webhook_server',
+                'start': start,
+                'end': int(time.time() * 1000),
+                'remark': command
 
+            })
         elif command == 'final':
             input_data = await self.brick_db.get()
             add_type = input_data['store'][0]['value']
@@ -74,11 +59,26 @@ class Address(object):
             else:
                 a_type = 'road'
 
+            start = int(time.time() * 1000)
             res = requests.get(
                 url='http://openapi.epost.go.kr/postal/retrieveNewAdressAreaCdService/retrieveNewAdressAreaCdService/getNewAddressListAreaCd?_type=json&serviceKey=%s&searchSe=%s&srchwrd=%s&countPerPage=10&currentPage=1' % (
                     input_data['data']['api_key'], a_type, urllib.parse.quote_plus(address)))
 
             parsed_data = res.json()
+            requests.put('https://www.chatbrick.io/api/log/', json={
+                'log_id': self.brick_db.log_id,
+                'user_id': self.brick_db.user_id,
+                'os': '',
+                'application': 'facebook',
+                'api_code': 'get_new_address',
+                'api_provider_code': 'epost',
+                'origin': 'webhook_server',
+                'start': start,
+                'end': int(time.time() * 1000),
+                'remark': command
+
+            })
+
             items = []
             if parsed_data.get('NewAddressListResponse', False):
                 if parsed_data['NewAddressListResponse'].get('newAddressListAreaCd', False):
@@ -125,8 +125,23 @@ class Address(object):
                     )
                 ]
 
+            start = int(time.time() * 1000)
+
             await self.brick_db.delete()
             await self.fb.send_messages(send_message)
+            requests.put('https://www.chatbrick.io/api/log/', json={
+                'log_id': self.brick_db.log_id,
+                'user_id': self.brick_db.user_id,
+                'os': '',
+                'application': 'facebook',
+                'api_code': 'send_message',
+                'api_provider_code': 'facebook',
+                'origin': 'webhook_server',
+                'start': start,
+                'end': int(time.time() * 1000),
+                'remark': command
+
+            })
         return None
 
     async def telegram(self, command):
@@ -152,11 +167,26 @@ class Address(object):
             else:
                 a_type = 'road'
 
+            start = int(time.time() * 1000)
+
             res = requests.get(
                 url='http://openapi.epost.go.kr/postal/retrieveNewAdressAreaCdService/retrieveNewAdressAreaCdService/getNewAddressListAreaCd?_type=json&serviceKey=%s&searchSe=%s&srchwrd=%s&countPerPage=10&currentPage=1' % (
                     input_data['data']['api_key'], a_type, urllib.parse.quote_plus(address)))
 
             parsed_data = res.json()
+            requests.put('https://www.chatbrick.io/api/log/', json={
+                'log_id': self.brick_db.log_id,
+                'user_id': self.brick_db.user_id,
+                'os': '',
+                'application': 'telegram',
+                'api_code': 'get_new_address',
+                'api_provider_code': 'epost',
+                'origin': 'webhook_server',
+                'start': start,
+                'end': int(time.time() * 1000),
+                'remark': command
+
+            })
             items = []
             if parsed_data.get('NewAddressListResponse', False):
                 if parsed_data['NewAddressListResponse'].get('newAddressListAreaCd', False):
@@ -198,6 +228,21 @@ class Address(object):
                         )
                     )
                 ]
+            start = int(time.time() * 1000)
+
             await self.brick_db.delete()
             await self.fb.send_messages(send_message)
+            requests.put('https://www.chatbrick.io/api/log/', json={
+                'log_id': self.brick_db.log_id,
+                'user_id': self.brick_db.user_id,
+                'os': '',
+                'application': 'telegram',
+                'api_code': 'send_message',
+                'api_provider_code': 'telegram',
+                'origin': 'webhook_server',
+                'start': start,
+                'end': int(time.time() * 1000),
+                'remark': command
+
+            })
         return None

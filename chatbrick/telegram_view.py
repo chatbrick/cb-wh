@@ -1,9 +1,12 @@
 import logging
 import motor.motor_asyncio
 import os
+import requests
 
+import time
 from aiohttp import web
 from chatbrick.brick import find_custom_brick
+import traceback
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -38,17 +41,26 @@ async def telegram_post(request):
     chat_data = request.app['chat'].get(name, None)
     tg = chat_data.get('tg', None)
     data = await request.json()
-    logger.info(data)
 
-    if tg:
-        chat = chat_data['chat']
+    try:
+        if tg:
+            chat = chat_data['chat']
 
-        request.app.loop.create_task(tg_message_poc(tg, chat, data))
+            request.app.loop.create_task(tg_message_poc(tg, chat, data))
+    except Exception as ex:
+        logger.error(ex)
+        traceback.print_exc()
+
     return web.Response(text='null', status=200)
 
 
 async def tg_message_poc(tg, chat, data):
-    commands = {}
+    start = int(time.time() * 1000)
+
+    commands = {
+        'log_id': 'SendMessage%d' % start,
+        'user_id': None
+    }
     if 'message' in data:
         message = data['message']
         is_go = True
@@ -66,8 +78,6 @@ async def tg_message_poc(tg, chat, data):
                                                       'platform': 'telegram'})
         if 'text' in data['message'] and is_go:
             logger.info('only text')
-
-            logger.info('text_input')
             logger.info(text_input)
             if text_input:
                 is_final = False
@@ -103,9 +113,9 @@ async def tg_message_poc(tg, chat, data):
                     logger.info(await tg.send_message(text_input['store'][final_store_idx]['message']['method'],
                                                       action_message))
 
-            if not is_go_on and not is_final:
-                commands['value'] = data['message']['text']
-                await find_brick(tg, chat, message, 'text', **commands)
+                if not is_go_on and not is_final:
+                    commands['value'] = data['message']['text']
+                    await find_brick(tg, chat, message, 'text', **commands)
 
         elif 'photo' in data['message'] and is_go:
             logger.info('Photo!!')
@@ -153,7 +163,6 @@ async def tg_message_poc(tg, chat, data):
                     logger.info(await tg.send_message(text_input['store'][final_store_idx]['message']['method'],
                                                       action_message))
 
-
         # if 'attatchments' in data['message'] and
 
     elif 'callback_query' in data:
@@ -173,6 +182,18 @@ async def tg_message_poc(tg, chat, data):
             brick_type = 'callback'
         await find_brick(tg, chat, callback, brick_type, **commands)
 
+    requests.put('https://www.chatbrick.io/api/log/', json={
+        'log_id': commands['log_id'],
+        'user_id': commands['user_id'],
+        'os': '',
+        'application': 'telegram',
+        'task_code': 'SendMessage',
+        'start': start,
+        'end': int(time.time() * 1000),
+        'remark': ''
+
+    })
+
 
 async def find_brick(tg, chat, raw_message, brick_type, **kwargs):
     logger.info(brick_type)
@@ -183,7 +204,7 @@ async def find_brick(tg, chat, raw_message, brick_type, **kwargs):
         is_not_find = False
         await find_custom_brick(client=tg, platform='telegram', brick_id=kwargs['brick'],
                                 command=kwargs['sub_command'], brick_data={'id': kwargs['brick']},
-                                msg_data=raw_message, brick_config=brick_data)
+                                msg_data=raw_message, brick_config=brick_data, log_id=kwargs['log_id'])
     else:
         for brick in chat['telegram']['bricks']:
             if brick['type'] == brick_type and brick['value'] == kwargs['value']:
@@ -207,7 +228,8 @@ async def find_brick(tg, chat, raw_message, brick_type, **kwargs):
                                 await find_custom_brick(client=tg, platform='telegram',
                                                         brick_id=action['brick']['id'],
                                                         command='get_started', brick_data=action['brick'],
-                                                        msg_data=raw_message, brick_config=brick_data))
+                                                        msg_data=raw_message, brick_config=brick_data,
+                                                        log_id=kwargs['log_id']))
 
     if is_not_find:
         send_message = {

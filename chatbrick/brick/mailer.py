@@ -75,13 +75,18 @@ class Mailer(object):
             msg = MIMEText(input_data['store'][2]['value'])
             msg['Subject'] = '%s로부터 이메일입니다.' % input_data['store'][0]['value']
             msg['To'] = input_data['store'][1]['value']
-            self.smtp.ehlo()
-            self.smtp.starttls()
-            self.smtp.login(self.sender_email, self.sender_password)
-            self.smtp.sendmail(self.sender_email, input_data['store'][1]['value'], msg.as_string())
+            result = '메일 보내기가 완료되었어요.'
+            try:
+                self.smtp.ehlo()
+                self.smtp.starttls()
+                self.smtp.login(self.sender_email, self.sender_password)
+                self.smtp.sendmail(self.sender_email, input_data['store'][1]['value'], msg.as_string())
+            except:
+                result = '메일 전송을 실패했습니다.\n잠시 후 다시 시도해주세요.'
+
             await self.fb.send_message(
                 message=Message(
-                    text='메일 보내기가 완료되었어요.',
+                    text=result,
                     quick_replies=QuickReply(
                         quick_reply_items=[
                             QuickReplyTextItem(
@@ -141,13 +146,18 @@ class Mailer(object):
             msg = MIMEText(input_data['store'][2]['value'])
             msg['Subject'] = '%s로부터 이메일입니다.' % input_data['store'][0]['value']
             msg['To'] = input_data['store'][1]['value']
-            self.smtp.ehlo()
-            self.smtp.starttls()
-            self.smtp.login(self.sender_email, self.sender_password)
-            self.smtp.sendmail(self.sender_email, input_data['store'][1]['value'], msg.as_string())
+            result = '메일 보내기가 완료되었어요.'
+            try:
+                self.smtp.ehlo()
+                self.smtp.starttls()
+                self.smtp.login(self.sender_email, self.sender_password)
+                self.smtp.sendmail(self.sender_email, input_data['store'][1]['value'], msg.as_string())
+            except:
+                result = '메일 전송을 실패했습니다.\n잠시 후 다시 시도해주세요.'
+
             await self.fb.send_message(
                 tg.SendMessage(
-                    text='메일 보내기가 완료되었어요.',
+                    text=result,
                     reply_markup=tg.MarkUpContainer(
                         inline_keyboard=[
                             [

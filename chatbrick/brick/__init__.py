@@ -29,6 +29,8 @@ from .tts import Tts
 from .public_jobs import PublicJobs
 from .shortener import Shortener
 from .currency import Currency
+from .mailer_for_brick import MailerForSet
+from .location_test import LocationTest
 
 FILE_DIR = '/home/ec2-user/app/chatbrick_main/src'
 
@@ -56,6 +58,8 @@ BRICK = {
     'public_jobs': PublicJobs,
     'shortener': Shortener,
     'currency': Currency,
+    'mailerforset': MailerForSet,
+    'location_test': LocationTest,
 }
 BRICK_DEFAULT_CONFIG = {}
 
@@ -72,35 +76,10 @@ class BrickFacebookAPIClient(object):
 
     async def send_messages(self, messages):
         for idx, message in enumerate(messages):
-            start = int(time.time() * 1000)
-
             await self.fb.send_message(RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE'))
-            requests.post('https://www.chatbrick.io/api/log/', data={
-                'brick_id': '',
-                'platform': 'facebook',
-                'start': start,
-                'fb_id': self.rep.recipient_id,
-                'end': int(time.time() * 1000),
-                'tag': '페이스북,여러메시지호출,%s,%s' % (idx, self.rep.recipient_id),
-                'data': json.dumps(
-                    RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE').get_data()),
-                'remark': '페이스북 메시지호출'
-            })
 
     async def send_message(self, message):
-        start = int(time.time() * 1000)
         await self.fb.send_message(RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE'))
-        requests.post('https://www.chatbrick.io/api/log/', data={
-            'brick_id': '',
-            'platform': 'facebook',
-            'start': start,
-            'end': int(time.time() * 1000),
-            'fb_id': self.rep.recipient_id,
-            'tag': '페이스북,단건메시지호출,%s' % self.rep.recipient_id,
-            'data': json.dumps(
-                RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE').get_data()),
-            'remark': '페이스북 메시지호출'
-        })
 
 
 class BrickTelegramAPIClient(object):
@@ -138,12 +117,13 @@ class BrickTelegramAPIClient(object):
 
 
 class BrickInputMessage(object):
-    def __init__(self, platform, fb, rep, brick_data):
+    def __init__(self, platform, fb, rep, brick_data, log_id, user_id=None):
         self.db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
         self.platform = platform
         self.brick_data = brick_data
         self.fb = fb
-
+        self.log_id = log_id
+        self.user_id = user_id
         if self.platform == 'facebook':
             self.rep = rep.recipient_id
         else:
@@ -241,7 +221,8 @@ class BrickInputMessage(object):
                                                  'platform': self.platform})
 
 
-async def find_custom_brick(client, platform, brick_id, command, brick_data, msg_data, brick_config):
+async def find_custom_brick(client, platform, brick_id, command, brick_data, msg_data, brick_config, log_id):
+
     if brick_config is not None:
         if brick_config.get(brick_id, False):
             brick_data['data'] = brick_config[brick_id]
@@ -253,14 +234,14 @@ async def find_custom_brick(client, platform, brick_id, command, brick_data, msg
             if brick_data['data'][key] == '':
                 brick_data['data'][key] = brick_default_data[key]
 
-    logger.info('find_custom_brick/brick_config')
-    logger.info(brick_config)
     brick = BRICK.get(brick_id, False)
 
     if brick:
         if platform == 'facebook':
-            fb = BrickFacebookAPIClient(fb=client, rep=Recipient(recipient_id=msg_data['sender']['id']))
-            brick_input = BrickInputMessage(fb=fb, platform=platform, rep=fb.rep, brick_data=brick_data)
+            user_id = msg_data['sender']['id']
+            fb = BrickFacebookAPIClient(fb=client, rep=Recipient(recipient_id=user_id))
+            brick_input = BrickInputMessage(fb=fb, platform=platform, rep=fb.rep, brick_data=brick_data, log_id=log_id,
+                                            user_id=user_id)
             if brick is SendEmail:
                 email = SendEmail(receiver_email=brick_config['receiver_email'], title=brick_config['title'])
                 return email.facebook(fb_token=client.access_token, psid=msg_data['sender']['id'])
@@ -268,8 +249,10 @@ async def find_custom_brick(client, platform, brick_id, command, brick_data, msg
                 return await brick(fb=fb, brick_db=brick_input).facebook(command)
 
         elif platform == 'telegram':
-            tg = BrickTelegramAPIClient(tg=client, rep=msg_data['from']['id'])
-            brick_input = BrickInputMessage(fb=tg, platform=platform, rep=tg.rep, brick_data=brick_data)
+            user_id = msg_data['from']['id']
+            tg = BrickTelegramAPIClient(tg=client, rep=user_id)
+            brick_input = BrickInputMessage(fb=tg, platform=platform, rep=tg.rep, brick_data=brick_data, log_id=log_id,
+                                            user_id=user_id)
 
             if brick_id == 'send_email':
                 email = SendEmail(receiver_email=brick_config['receiver_email'], title=brick_config['title'])

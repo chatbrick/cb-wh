@@ -27,35 +27,6 @@ class MailerForSet(object):
 
     async def facebook(self, command):
         if command == 'get_started':
-            send_message = [
-                Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE
-                    )
-                ),
-                Message(
-                    text='블루핵에서 제공하는 "메일보내기 서비스"예요.'
-                ),
-                Message(
-                    attachment=TemplateAttachment(
-                        payload=GenericTemplate(
-                            elements=[
-                                Element(title='메일전송',
-                                        subtitle='챗봇에서 메일을 보낼 수 있어요',
-                                        image_url=BRICK_GENERIC_TEMPLATE_IMAGE,
-                                        buttons=[
-                                            PostBackButton(
-                                                title='메일보내기',
-                                                payload='brick|mailer|show_data'
-                                            )
-                                        ])
-                            ]
-                        )
-                    )
-                )
-            ]
-            await self.fb.send_messages(send_message)
-        elif command == 'show_data':
             await self.brick_db.save()
         elif command == 'cancel':
             await self.brick_db.delete()
@@ -66,20 +37,20 @@ class MailerForSet(object):
                         quick_reply_items=[
                             QuickReplyTextItem(
                                 title='새 메일보내기',
-                                payload='brick|mailer|show_data'
+                                payload='brick|mailerforset|get_started'
                             )
                         ]
                     )
                 ))
         elif command == 'final':
             input_data = await self.brick_db.get()
-            msg = MIMEText(input_data['store'][2]['value'])
+            msg = MIMEText(input_data['store'][1]['value'])
             msg['Subject'] = '%s로부터 이메일입니다.' % input_data['store'][0]['value']
-            msg['To'] = input_data['store'][1]['value']
+            msg['To'] = input_data['data']['to']
             self.smtp.ehlo()
             self.smtp.starttls()
             self.smtp.login(self.sender_email, self.sender_password)
-            self.smtp.sendmail(self.sender_email, input_data['store'][1]['value'], msg.as_string())
+            self.smtp.sendmail(self.sender_email, input_data['data']['to'], msg.as_string())
             await self.fb.send_message(
                 message=Message(
                     text='메일 보내기가 완료되었어요.',
@@ -87,7 +58,7 @@ class MailerForSet(object):
                         quick_reply_items=[
                             QuickReplyTextItem(
                                 title='연속하여 메일보내기',
-                                payload='brick|mailer|show_data'
+                                payload='brick|mailerforset|get_started'
                             )
                         ]
                     )
@@ -98,27 +69,6 @@ class MailerForSet(object):
 
     async def telegram(self, command):
         if command == 'get_started':
-            send_message = [
-                tg.SendPhoto(
-                    photo=BRICK_DEFAULT_IMAGE
-                ),
-                tg.SendMessage(
-                    text='블루핵에서 제공하는 "메일보내기 서비스"예요.',
-                    reply_markup=tg.MarkUpContainer(
-                        inline_keyboard=[
-                            [
-                                tg.CallbackButton(
-                                    text='메일 보내기',
-                                    callback_data='BRICK|mailer|show_data'
-                                )
-                            ]
-                        ]
-                    )
-                )
-
-            ]
-            await self.fb.send_messages(send_message)
-        elif command == 'show_data':
             await self.brick_db.save()
         elif command == 'cancel':
             await self.brick_db.delete()
@@ -130,7 +80,7 @@ class MailerForSet(object):
                             [
                                 tg.CallbackButton(
                                     text='메일 보내기',
-                                    callback_data='BRICK|mailer|show_data'
+                                    callback_data='BRICK|mailerforset|get_started'
                                 )
                             ]
                         ]
@@ -139,13 +89,13 @@ class MailerForSet(object):
             )
         elif command == 'final':
             input_data = await self.brick_db.get()
-            msg = MIMEText(input_data['store'][2]['value'])
+            msg = MIMEText(input_data['store'][1]['value'])
             msg['Subject'] = '%s로부터 이메일입니다.' % input_data['store'][0]['value']
-            msg['To'] = input_data['store'][1]['value']
+            msg['To'] = input_data['data']['to']
             self.smtp.ehlo()
             self.smtp.starttls()
             self.smtp.login(self.sender_email, self.sender_password)
-            self.smtp.sendmail(self.sender_email, input_data['store'][1]['value'], msg.as_string())
+            self.smtp.sendmail(self.sender_email, input_data['data']['to'], msg.as_string())
             await self.fb.send_message(
                 tg.SendMessage(
                     text='메일 보내기가 완료되었어요.',
@@ -154,7 +104,7 @@ class MailerForSet(object):
                             [
                                 tg.CallbackButton(
                                     text='연속하여 메일보내기',
-                                    callback_data='BRICK|mailer|show_data'
+                                    callback_data='BRICK|mailerforset|get_started'
                                 )
                             ]
                         ]

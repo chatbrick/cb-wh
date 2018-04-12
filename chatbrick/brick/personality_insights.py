@@ -43,7 +43,6 @@ class PersonalityInsight(object):
             input_data = await self.brick_db.get()
             contents = input_data['store'][0]['value']
             parsed_result = await PersonalityInsight.get_data(input_data['data'], contents)
-            logger.debug(parsed_result)
             sending_message = '두구두구!\n자소서에 분석결과\n\n총 단어수 {word_count}\n'.format(
                 word_count=parsed_result.get('word_count', '0'))
 
@@ -93,7 +92,6 @@ class PersonalityInsight(object):
             input_data = await self.brick_db.get()
             contents = input_data['store'][0]['value']
             parsed_result = await PersonalityInsight.get_data(input_data['data'], contents)
-            logger.debug(parsed_result)
             sending_message = '두구두구!\n자소서에 분석결과\n\n총 단어수 {word_count}\n'.format(
                 word_count=parsed_result.get('word_count', '0'))
 

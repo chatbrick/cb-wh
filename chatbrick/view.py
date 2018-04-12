@@ -62,20 +62,10 @@ class CreateTelegramApiClient(object):
                 logger.debug(req.json())
 
     async def send_message(self, method, message):
-        start = int(time.time() * 1000)
         req = requests.post(url='https://api.telegram.org/bot%s/%s' % (self.token, method),
                             data=json.dumps(message),
                             headers={'Content-Type': 'application/json'},
                             timeout=15)
-        requests.post('https://www.chatbrick.io/api/log/', data={
-            'brick_id': '',
-            'platform': 'telegram',
-            'start': start,
-            'end': int(time.time() * 1000),
-            'tag': '텔레그램,%s' % method,
-            'data': json.dumps(message),
-            'remark': '텔레그램 메시지호출'
-        })
         return req.json()
 
     @property
@@ -172,10 +162,14 @@ async def facebook_post(request):
 
 async def fb_message_poc(chat, fb, entry):
     try:
+        start = int(time.time() * 1000)
+        log_id = 'SendMessage%d' % start
+        user_id = None
         for messaging in entry['messaging']:
             rep = Recipient(recipient_id=messaging['sender']['id'])
+            user_id = messaging['sender']['id']
             if 'postback' in messaging:
-                await find_brick(fb, chat, messaging, rep, 'postback', messaging['postback']['payload'])
+                await find_brick(fb, chat, messaging, rep, 'postback', messaging['postback']['payload'], log_id)
             elif 'message' in messaging:
                 db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
                 text_input = await db.message_store.find_one({'id': rep.recipient_id,
@@ -183,7 +177,7 @@ async def fb_message_poc(chat, fb, entry):
                 is_not_find = True
                 if 'quick_reply' in messaging['message']:
                     await find_brick(fb, chat, messaging, rep, 'postback',
-                                     messaging['message']['quick_reply']['payload'])
+                                     messaging['message']['quick_reply']['payload'], log_id)
                 elif 'text' in messaging['message']:
                     logger.info('text_input')
                     logger.info(text_input)
@@ -213,7 +207,7 @@ async def fb_message_poc(chat, fb, entry):
 
                         if is_final:
                             messaging['command'] = 'final'
-                            await find_brick(fb, chat, messaging, rep, 'brick', text_input['brick_id'])
+                            await find_brick(fb, chat, messaging, rep, 'brick', text_input['brick_id'], log_id)
                         elif is_go_on:
                             await fb.send_message(RequestDataFormat(recipient=rep,
                                                                     message=text_input['store'][final_store_idx][
@@ -221,7 +215,7 @@ async def fb_message_poc(chat, fb, entry):
 
                     else:
                         await find_brick(fb, chat, messaging, rep, 'text',
-                                         messaging['message']['text'])
+                                         messaging['message']['text'], log_id)
                 elif 'attachments' in messaging['message']:
                     for attachment in messaging['message']['attachments']:
                         if attachment['type'] == 'image':
@@ -252,12 +246,23 @@ async def fb_message_poc(chat, fb, entry):
 
                                 if is_final:
                                     messaging['command'] = 'final'
-                                    await find_brick(fb, chat, messaging, rep, 'brick', text_input['brick_id'])
+                                    await find_brick(fb, chat, messaging, rep, 'brick', text_input['brick_id'], log_id)
                                 elif is_go_on:
                                     await fb.send_message(RequestDataFormat(recipient=rep,
                                                                             message=
                                                                             text_input['store'][final_store_idx][
                                                                                 'message'], message_type='RESPONSE'))
+        requests.put('https://www.chatbrick.io/api/log/', json={
+            'log_id': log_id,
+            'user_id': user_id,
+            'os': '',
+            'application': 'facebook',
+            'task_code': 'SendMessage',
+            'start': start,
+            'end': int(time.time() * 1000),
+            'remark': ''
+
+        })
 
     except Exception as e:
         traceback.print_exc()
@@ -265,7 +270,7 @@ async def fb_message_poc(chat, fb, entry):
         logger.debug('에러 발생')
 
 
-async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value):
+async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value, log_id):
     logger.info(brick_type)
     logger.info(value)
     is_not_find = True
@@ -275,7 +280,7 @@ async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value):
         is_not_find = False
         await find_custom_brick(client=fb, platform='facebook', brick_id=value,
                                 command='final', brick_data={'id': value},
-                                msg_data=raw_msg_data, brick_config=chat.get('brick_data', None))
+                                msg_data=raw_msg_data, brick_config=chat.get('brick_data', None), log_id=log_id)
 
     # payload가 브릭과 관련된 경우인지 확인하는 부분
     if brick_type == 'postback' and value.startswith('brick|'):
@@ -283,7 +288,7 @@ async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value):
         brick_payalod_cmd = brick_payload(value)
         await find_custom_brick(client=fb, platform='facebook', brick_id=brick_payalod_cmd['brick_id'],
                                 command=brick_payalod_cmd['command'], brick_data={'id': brick_payalod_cmd['brick_id']},
-                                msg_data=raw_msg_data, brick_config=chat.get('brick_data', None))
+                                msg_data=raw_msg_data, brick_config=chat.get('brick_data', None), log_id=log_id)
 
     # 일반적인 경우에는 여기서 진행함 - 미리 만들어진 시나리오를 통해 동작하는 경우
     for brick in chat['bricks']:
@@ -310,24 +315,14 @@ async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value):
             for send_action in brick['actions']:
                 logger.info(send_action)
                 if 'message' in send_action:
-                    start = int(time.time() * 1000)
                     logger.info(await fb.send_message(TempMessage(recipient=rep, message=send_action['message'])))
-                    requests.post('https://www.chatbrick.io/api/log/', data={
-                        'brick_id': '',
-                        'platform': 'telegram',
-                        'start': start,
-                        'end': int(time.time() * 1000),
-                        'tag': '페이스북,단건',
-                        'data': json.dumps(TempMessage(recipient=rep, message=send_action['message']).get_data()),
-                        'remark': '페이스북 단건 메시지호출'
-                    })
-
                 # Actions에서 브릭이 있으면 호출
                 elif 'brick' in send_action:
                     logger.info(
                         await find_custom_brick(client=fb, platform='facebook', brick_id=send_action['brick']['id'],
                                                 command='get_started', brick_data=send_action['brick'],
-                                                msg_data=raw_msg_data, brick_config=chat.get('brick_data', None)))
+                                                msg_data=raw_msg_data, brick_config=chat.get('brick_data', None),
+                                                log_id=log_id))
             break
 
     if is_not_find:
