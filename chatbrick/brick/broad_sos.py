@@ -3,9 +3,10 @@ import logging
 import blueforge.apis.telegram as tg
 import urllib.parse
 import requests
-from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
+from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem, TemplateAttachment, GenericTemplate, Element
 
 from chatbrick.util import get_items_from_xml, remove_html_tag, UNKNOWN_ERROR_MSG
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +20,27 @@ class BroadSos(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+            # send_message = [
+            #     Message(
+            #         attachment=ImageAttachment(
+            #             url=BRICK_DEFAULT_IMAGE
+            #         )
+            #     ),
+            #     Message(
+            #         text='외교부에서 제공하는 "해외에서 SOS 서비스"에요.'
+            #     )
+            # ]
             send_message = [
                 Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE
+                    attachment=TemplateAttachment(
+                        payload=GenericTemplate(
+                            elements=[
+                                Element(image_url=BRICK_DEFAULT_IMAGE,
+                                        title='해외에서 SOS 서비스',
+                                        subtitle='외교부에서 제공하는 "해외에서 SOS 서비스"에요.')
+                            ]
+                        )
                     )
-                ),
-                Message(
-                    text='외교부에서 제공하는 "해외에서 SOS 서비스"에요.'
                 )
             ]
             await self.fb.send_messages(send_message)
@@ -111,6 +125,7 @@ class BroadSos(object):
         elif command == 'final':
             input_data = await self.brick_db.get()
             country = input_data['store'][0]['value']
+
             res = requests.get(
                 url='http://apis.data.go.kr/1262000/ContactService/getContactList?serviceKey=%s&numOfRows=10&pageSize=10&pageNo=1&startPage=1&countryName=%s' % (
                     input_data['data']['api_key'], urllib.parse.quote_plus(country)))

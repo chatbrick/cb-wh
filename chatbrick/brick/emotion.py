@@ -6,6 +6,8 @@ import json
 import operator
 
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
+import urllib.parse
+from blueforge.apis.facebook import TemplateAttachment, Element, GenericTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +30,28 @@ class Emotion(object):
         self.brick_db = brick_db
         self.fb = fb
 
+    # @staticmethod
+    # async def get_data(brick_data, url):
+    #     raw_image = requests.get(url)
+    #     req = requests.post(
+    #         'https://westus.api.cognitive.microsoft.com/emotion/v1.0/recognize',
+    #         headers={
+    #             'Content-Type': 'application/octet-stream',
+    #             'Ocp-Apim-Subscription-Key': brick_data['subscription']
+    #
+    #         },
+    #         data=raw_image.content)
+    #     return req.json()
+
     @staticmethod
     async def get_data(brick_data, url):
         raw_image = requests.get(url)
         req = requests.post(
-            'https://westus.api.cognitive.microsoft.com/emotion/v1.0/recognize',
+            'https://westcentralus.api.cognitive.microsoft.com/face/v1.0/detect?%s' % urllib.parse.urlencode({
+                'returnFaceId': 'false',
+                'returnFaceLandmarks': 'false',
+                'returnFaceAttributes': 'emotion'
+            }),
             headers={
                 'Content-Type': 'application/octet-stream',
                 'Ocp-Apim-Subscription-Key': brick_data['subscription']
@@ -43,14 +62,27 @@ class Emotion(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+            # send_message = [
+            #     Message(
+            #         attachment=ImageAttachment(
+            #             url=BRICK_DEFAULT_IMAGE
+            #         )
+            #     ),
+            #     Message(
+            #         text='Microsoft Azure-AI Cognitive에서 제공하는 "사진속 감정을 읽어드리는 서비스"에요.'
+            #     )
+            # ]
             send_message = [
                 Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE
+                    attachment=TemplateAttachment(
+                        payload=GenericTemplate(
+                            elements=[
+                                Element(image_url=BRICK_DEFAULT_IMAGE,
+                                        title='사진속 감정을 읽어드리는 서비스',
+                                        subtitle='Microsoft Azure-AI Cognitive에서 제공하는 "사진속 감정을 읽어드리는 서비스"에요.')
+                            ]
+                        )
                     )
-                ),
-                Message(
-                    text='Microsoft Azure-AI Cognitive에서 제공하는 "사진속 감정을 읽어드리는 서비스"에요.'
                 )
             ]
             await self.fb.send_messages(send_message)
@@ -59,20 +91,7 @@ class Emotion(object):
             input_data = await self.brick_db.get()
             face_1 = input_data['store'][0]['value']
 
-            start = int(time.time() * 1000)
             res = await Emotion.get_data(input_data['data'], face_1)
-            requests.post('https://www.chatbrick.io/api/log/', data={
-                'brick_id': 'emotion',
-                'platform': 'facebook',
-                'fb_id': self.fb.rep.recipient_id,
-                'start': start,
-                'end': int(time.time() * 1000),
-                'tag': '페이스북,페이스,API,내기분어때,감정',
-                'data': json.dumps(res),
-                'remark': '얼마나닮았지 블루믹스 감정 API 호출'
-            })
-
-            logger.info(res)
 
             if type(res) is dict and res.get('error', False):
                 send_message = [
@@ -105,7 +124,8 @@ class Emotion(object):
                         )
                     ]
                 else:
-                    sorted_score = sorted(res[0]['scores'].items(), key=operator.itemgetter(1), reverse=True)
+                    res_face = res[0]['faceAttributes']['emotion']
+                    sorted_score = sorted(res_face.items(), key=operator.itemgetter(1), reverse=True)
 
                     send_message = [
                         Message(
@@ -146,19 +166,7 @@ class Emotion(object):
             input_data = await self.brick_db.get()
             face_1 = input_data['store'][0]['value']
 
-            start = int(time.time() * 1000)
             res = await Emotion.get_data(input_data['data'], face_1)
-            requests.post('https://www.chatbrick.io/api/log/', data={
-                'brick_id': 'emotion',
-                'platform': 'telegram',
-                'start': start,
-                'end': int(time.time() * 1000),
-                'tag': '텔레그램,페이스,API,내기분어때,감정',
-                'data': json.dumps(res),
-                'remark': '얼마나닮았지 블루믹스 감정 API 호출'
-            })
-
-            logger.info(res)
 
             if type(res) is dict and res.get('error', False):
                 send_message = [
@@ -196,7 +204,8 @@ class Emotion(object):
                         )
                     ]
                 else:
-                    sorted_score = sorted(res[0]['scores'].items(), key=operator.itemgetter(1), reverse=True)
+                    res_face = res[0]['faceAttributes']['emotion']
+                    sorted_score = sorted(res_face.items(), key=operator.itemgetter(1), reverse=True)
 
                     send_message = [
                         tg.SendMessage(

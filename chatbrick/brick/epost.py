@@ -3,6 +3,8 @@ import logging
 import blueforge.apis.telegram as tg
 import requests
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
+import time
+from blueforge.apis.facebook import TemplateAttachment, Element, GenericTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -16,14 +18,27 @@ class EPost(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+            # send_message = [
+            #     Message(
+            #         attachment=ImageAttachment(
+            #             url=BRICK_DEFAULT_IMAGE
+            #         )
+            #     ),
+            #     Message(
+            #         text='과학기술정보통신부 우정사업본부에서 제공하는 "우체국택배조회 서비스"에요.'
+            #     )
+            # ]
             send_message = [
                 Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE
+                    attachment=TemplateAttachment(
+                        payload=GenericTemplate(
+                            elements=[
+                                Element(image_url=BRICK_DEFAULT_IMAGE,
+                                        title='우체국택배조회 서비스',
+                                        subtitle='과학기술정보통신부 우정사업본부에서 제공하는 "우체국택배조회 서비스"에요.')
+                            ]
+                        )
                     )
-                ),
-                Message(
-                    text='과학기술정보통신부 우정사업본부에서 제공하는 "우체국택배조회 서비스"에요.'
                 )
             ]
             await self.fb.send_messages(send_message)
@@ -39,6 +54,7 @@ class EPost(object):
 
             parsed_data = res.json()
             items = []
+            send_message = []
             if parsed_data.get('LongitudinalDomesticListResponse', False):
 
                 if parsed_data['LongitudinalDomesticListResponse']['cmmMsgHeader']['successYN'] == 'Y':
@@ -85,6 +101,12 @@ class EPost(object):
                             )
                         )
                     ]
+            if len(send_message) == 0:
+                send_message = [
+                    Message(
+                        text='조회된 결과가 없습니다.'
+                    )
+                ]
 
             await self.brick_db.delete()
             await self.fb.send_messages(send_message)
@@ -113,8 +135,7 @@ class EPost(object):
 
             parsed_data = res.json()
             items = []
-
-
+            send_message = []
             if parsed_data.get('LongitudinalDomesticListResponse', False):
 
                 if parsed_data['LongitudinalDomesticListResponse']['cmmMsgHeader']['successYN'] == 'Y':
@@ -167,6 +188,12 @@ class EPost(object):
                         )
                     ]
 
+            if len(send_message) == 0:
+                send_message = [
+                    tg.SendMessage(
+                        text='조회된 결과가 없습니다.'
+                    )
+                ]
             await self.brick_db.delete()
             await self.fb.send_messages(send_message)
         return None

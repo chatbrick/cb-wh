@@ -13,7 +13,7 @@ from bson.json_util import dumps
 from blueforge.apis.facebook import RequestDataFormat, Recipient
 from aiohttp import web
 from chatbrick.brick import find_custom_brick
-from blueforge.apis.facebook import CreateFacebookApiClient
+from .util import save_a_log_to_server, detect_log_type
 
 logger = logging.getLogger('aiohttp.access')
 loop = asyncio.get_event_loop()
@@ -21,11 +21,34 @@ loop = asyncio.get_event_loop()
 
 async def send_message_profile(access_token, send_message):
     logger.debug(send_message)
-    res = requests.post(url='https://graph.facebook.com/v2.6/me/messenger_profile?access_token=%s' % access_token,
-                        data=json.dumps(send_message),
-                        headers={'Content-Type': 'application/json'})
+    requests.post(url='https://graph.facebook.com/v2.6/me/messenger_profile?access_token=%s' % access_token,
+                  data=json.dumps(send_message),
+                  headers={'Content-Type': 'application/json'})
 
-    logger.debug(res.json())
+
+class CreateFacebookApiClient(object):
+    def __init__(self, access_token):
+        self.access_token = access_token
+
+    async def send_message(self, message):
+        req = requests.post(url='https://graph.facebook.com/v2.6/me/messages?access_token=%s' % self.access_token,
+                            data=json.dumps(message.get_data()),
+                            headers={'Content-Type': 'application/json'},
+                            timeout=30)
+
+        return req.json()
+
+    async def __send_action(self, recipient_id, action):
+        return await self.send_message(RequestDataFormat(recipient=recipient_id, sender_action=action))
+
+    async def set_typing_on(self, recipient_id):
+        return await self.__send_action(recipient_id, 'typing_on')
+
+    async def set_typing_off(self, recipient_id):
+        return await self.__send_action(recipient_id, 'typing_off')
+
+    async def set_mark_seen(self, recipient_id):
+        return await self.__send_action(recipient_id, 'mark_seen')
 
 
 class CreateTelegramApiClient(object):
@@ -99,13 +122,14 @@ def brick_payload(payload):
     }
 
 
-async def refresh_post(request):
+async def refresh_post_async(request):
     name = request.match_info.get('name', None)
+
     if name:
         db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
         chat = await db.facebook.find_one({'id': name})
-        logger.info(chat)
 
+        formed_chat = None
         if chat:
             formed_chat = {
                 'chat': json.loads(dumps(chat))
@@ -120,7 +144,6 @@ async def refresh_post(request):
                                                {'whitelisted_domains': menu['whitelisted_domains']})
 
                 await send_message_profile(chat['access_token'], chat['persistent_menu'][0])
-
                 formed_chat['fb'] = CreateFacebookApiClient(access_token=chat['access_token'])
 
             if chat.get('telegram', False):
@@ -128,10 +151,11 @@ async def refresh_post(request):
                     formed_chat['tg'] = CreateTelegramApiClient(chat['telegram']['token'])
 
         request.app['chat'][name] = formed_chat
-        logger.info(request.app['chat'])
-        return web.Response(text='Hello World')
 
-    return web.Response(text='null', status=404)
+
+async def refresh_post(request):
+    request.app.loop.create_task(refresh_post_async(request))
+    return web.Response(text='Hello World', status=200)
 
 
 async def facebook_get(request):
@@ -163,11 +187,10 @@ async def facebook_post(request):
 async def fb_message_poc(chat, fb, entry):
     try:
         start = int(time.time() * 1000)
-        log_id = 'SendMessage%d' % start
-        user_id = None
+        log_id = 'FBSendMessage|%d' % start
+
         for messaging in entry['messaging']:
             rep = Recipient(recipient_id=messaging['sender']['id'])
-            user_id = messaging['sender']['id']
             if 'postback' in messaging:
                 await find_brick(fb, chat, messaging, rep, 'postback', messaging['postback']['payload'], log_id)
             elif 'message' in messaging:
@@ -209,9 +232,22 @@ async def fb_message_poc(chat, fb, entry):
                             messaging['command'] = 'final'
                             await find_brick(fb, chat, messaging, rep, 'brick', text_input['brick_id'], log_id)
                         elif is_go_on:
+                            if log_id is None:
+                                log_id = 'FBSendMessage|%d' % int(time.time() * 1000)
                             await fb.send_message(RequestDataFormat(recipient=rep,
                                                                     message=text_input['store'][final_store_idx][
                                                                         'message'], message_type='RESPONSE'))
+                            log_id = save_a_log_to_server({
+                                'log_id': log_id,
+                                'user_id': rep.recipient_id,
+                                'os': '',
+                                'application': 'facebook',
+                                'task_code': detect_log_type(text_input['store'][final_store_idx]['message']),
+                                'origin': 'webhook_server',
+                                'end': int(time.time() * 1000),
+                                'remark': '메시지 보냈습니다.'
+
+                            })
 
                     else:
                         await find_brick(fb, chat, messaging, rep, 'text',
@@ -248,21 +284,23 @@ async def fb_message_poc(chat, fb, entry):
                                     messaging['command'] = 'final'
                                     await find_brick(fb, chat, messaging, rep, 'brick', text_input['brick_id'], log_id)
                                 elif is_go_on:
+                                    if log_id is None:
+                                        log_id = 'FBSendMessage|%d' % int(time.time() * 1000)
                                     await fb.send_message(RequestDataFormat(recipient=rep,
                                                                             message=
                                                                             text_input['store'][final_store_idx][
                                                                                 'message'], message_type='RESPONSE'))
-        requests.put('https://www.chatbrick.io/api/log/', json={
-            'log_id': log_id,
-            'user_id': user_id,
-            'os': '',
-            'application': 'facebook',
-            'task_code': 'SendMessage',
-            'start': start,
-            'end': int(time.time() * 1000),
-            'remark': ''
+                                    log_id = save_a_log_to_server({
+                                        'log_id': log_id,
+                                        'user_id': rep.recipient_id,
+                                        'os': '',
+                                        'application': 'facebook',
+                                        'task_code': detect_log_type(text_input['store'][final_store_idx]['message']),
+                                        'origin': 'webhook_server',
+                                        'end': int(time.time() * 1000),
+                                        'remark': '메시지 보냈습니다.'
 
-        })
+                                    })
 
     except Exception as e:
         traceback.print_exc()
@@ -274,7 +312,12 @@ async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value, log_id):
     logger.info(brick_type)
     logger.info(value)
     is_not_find = True
-    await fb.set_typing_on(rep)
+
+    try:
+        user_id = raw_msg_data['sender']['id']
+    except:
+        user_id = None
+
     # 브릭을 통한 진행은 여기서 진행함
     if brick_type == 'brick':
         is_not_find = False
@@ -315,7 +358,20 @@ async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value, log_id):
             for send_action in brick['actions']:
                 logger.info(send_action)
                 if 'message' in send_action:
+                    if log_id is None:
+                        log_id = 'FBSendMessage|%d' % int(time.time() * 1000)
                     logger.info(await fb.send_message(TempMessage(recipient=rep, message=send_action['message'])))
+                    log_id = save_a_log_to_server({
+                        'log_id': log_id,
+                        'user_id': rep.recipient_id,
+                        'os': '',
+                        'application': 'facebook',
+                        'task_code': detect_log_type(send_action['message']),
+                        'origin': 'webhook_server',
+                        'end': int(time.time() * 1000),
+                        'remark': '메시지 보냈습니다.'
+
+                    })
                 # Actions에서 브릭이 있으면 호출
                 elif 'brick' in send_action:
                     logger.info(
@@ -323,12 +379,23 @@ async def find_brick(fb, chat, raw_msg_data, rep, brick_type, value, log_id):
                                                 command='get_started', brick_data=send_action['brick'],
                                                 msg_data=raw_msg_data, brick_config=chat.get('brick_data', None),
                                                 log_id=log_id))
+
             break
 
     if is_not_find:
+        if log_id is None:
+            log_id = 'FBSendMessage|%d' % int(time.time() * 1000)
         logger.info(await fb.send_message(TempMessage(recipient=rep, message={
             'text': chat['settings']['data']['custom_settings'].get('error_msg', '알수가 없네요.')
         })))
+        save_a_log_to_server({
+            'log_id': log_id,
+            'user_id': rep.recipient_id,
+            'os': '',
+            'application': 'facebook',
+            'task_code': 'facebook_text',
+            'origin': 'webhook_server',
+            'end': int(time.time() * 1000),
+            'remark': '메시지 보냈습니다.'
 
-    await fb.set_mark_seen(rep)
-    await fb.set_typing_off(rep)
+        })

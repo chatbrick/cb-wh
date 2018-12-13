@@ -5,6 +5,9 @@ from datetime import datetime
 import blueforge.apis.telegram as tg
 import requests
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
+import time
+
+from blueforge.apis.facebook import TemplateAttachment, Element, GenericTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -48,14 +51,30 @@ class Currency(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+            # send_message = [
+            #     Message(
+            #         attachment=ImageAttachment(
+            #             url=BRICK_DEFAULT_IMAGE
+            #         )
+            #     ),
+            #     Message(
+            #         text='한국수출입은행에서 제공하는 "환율정보 서비스"에요.'
+            #     ),
+            #     Message(
+            #         text='chatbrick에서 제공하는 금융정보는 한국수출입은행으로부터 받는 정보로 투자 참고사항이며, 오류가 발생하거나 지연될 수 있습니다.\nchatbrick은 제공된 정보에 의한 투자결과에 법적책임을 지지 않습니다. 게시된 정보는 무단으로 배포할 수 없습니다.'
+            #     )
+            # ]
             send_message = [
                 Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE
+                    attachment=TemplateAttachment(
+                        payload=GenericTemplate(
+                            elements=[
+                                Element(image_url=BRICK_DEFAULT_IMAGE,
+                                        title='환율정보 서비스',
+                                        subtitle='한국수출입은행에서 제공하는 "환율정보 서비스"에요.')
+                            ]
+                        )
                     )
-                ),
-                Message(
-                    text='한국수출입은행에서 제공하는 "환율정보 서비스"에요.'
                 ),
                 Message(
                     text='chatbrick에서 제공하는 금융정보는 한국수출입은행으로부터 받는 정보로 투자 참고사항이며, 오류가 발생하거나 지연될 수 있습니다.\nchatbrick은 제공된 정보에 의한 투자결과에 법적책임을 지지 않습니다. 게시된 정보는 무단으로 배포할 수 없습니다.'
@@ -66,12 +85,13 @@ class Currency(object):
         elif command == 'final':
             input_data = await self.brick_db.get()
             currency = input_data['store'][0]['value']
+
             rslt = await Currency.get_data(input_data['data']['api_key'])
 
             if len(rslt) == 0:
                 send_message = [
                     Message(
-                        text='통화 정보가 없습니다.'
+                        text='금일의 통화 정보가 없습니다.'
                     )
                 ]
             else:
@@ -139,12 +159,13 @@ class Currency(object):
         elif command == 'final':
             input_data = await self.brick_db.get()
             currency = input_data['store'][0]['value']
+
             rslt = await Currency.get_data(input_data['data']['api_key'])
 
             if len(rslt) == 0:
                 send_message = [
                     tg.SendMessage(
-                        text='통화 정보가 없습니다.'
+                        text='금일의 통화 정보가 없습니다.'
                     )
                 ]
             else:

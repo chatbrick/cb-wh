@@ -1,36 +1,37 @@
+import json
 import logging
 import os
-import requests
 import time
+
 import motor.motor_asyncio
-import json
 from blueforge.apis.facebook import Recipient, RequestDataFormat
 
+from chatbrick.util import save_a_log_to_server, detect_log_type
+from .address import Address
+from .broad_sos import BroadSos
+from .broad_sos import BroadSos
+from .country import Country
+from .currency import Currency
+from .elec import Electric
 from .emergency import Emergency
+from .emotion import Emotion
+from .epost import EPost
+from .face import Face
 from .holiday import Holiday
+from .icn import Icn
+from .location_test import LocationTest
 from .lotto import Lotto
 from .luck import Luck
 from .mailer import Mailer
-from .send_email import SendEmail
-from .broad_sos import BroadSos
-from .broad_sos import BroadSos
-from .icn import Icn
-from .address import Address
-from .country import Country
-from .safe_journey import SafeJourney
-from .epost import EPost
-from .train import Train
-from .elec import Electric
-from .personality_insights import PersonalityInsight
-from .whoami import Who
-from .face import Face
-from .emotion import Emotion
-from .tts import Tts
-from .public_jobs import PublicJobs
-from .shortener import Shortener
-from .currency import Currency
 from .mailer_for_brick import MailerForSet
-from .location_test import LocationTest
+from .personality_insights import PersonalityInsight
+from .public_jobs import PublicJobs
+from .safe_journey import SafeJourney
+from .send_email import SendEmail
+from .shortener import Shortener
+from .train import Train
+from .tts import Tts
+from .whoami import Who
 
 FILE_DIR = '/home/ec2-user/app/chatbrick_main/src'
 
@@ -70,50 +71,113 @@ if len(BRICK_DEFAULT_CONFIG.keys()) == 0:
 
 
 class BrickFacebookAPIClient(object):
-    def __init__(self, fb, rep):
+    def __init__(self, fb, rep, log_id, user_id):
         self.fb = fb
         self.rep = rep
+        self.log_id = log_id
+        self.user_id = user_id
 
     async def send_messages(self, messages):
         for idx, message in enumerate(messages):
+            if self.log_id is None:
+                self.log_id = 'FBSendMessage|%d' % int(time.time() * 1000)
             await self.fb.send_message(RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE'))
+            self.log_id = save_a_log_to_server({
+                'log_id': self.log_id,
+                'user_id': self.user_id,
+                'os': '',
+                'application': 'facebook',
+                'task_code': detect_log_type(message),
+                'origin': 'webhook_server',
+                'end': int(time.time() * 1000),
+                'remark': '%d번째 브릭 메시지 보냈습니다.' % idx
+
+            })
 
     async def send_message(self, message):
+        if self.log_id is None:
+            self.log_id = 'FBSendMessage|%d' % int(time.time() * 1000)
         await self.fb.send_message(RequestDataFormat(recipient=self.rep, message=message, message_type='RESPONSE'))
+        self.log_id = save_a_log_to_server({
+                'log_id': self.log_id,
+                'user_id': self.user_id,
+                'os': '',
+                'application': 'facebook',
+                'task_code': detect_log_type(message),
+                'origin': 'webhook_server',
+                'end': int(time.time() * 1000),
+                'remark': '단건 브릭 메시지 보냈습니다.'
+
+            })
 
 
 class BrickTelegramAPIClient(object):
-    def __init__(self, tg, rep):
+    def __init__(self, tg, rep, log_id, user_id):
         self.tg = tg
         self.rep = rep
-
-    async def send_action(self, method):
-        await self.tg.send_action(method, self.rep)
+        self.log_id = log_id
+        self.user_id = user_id
+    #
+    # async def send_action(self, method):
+    #     await self.tg.send_action(method, self.rep)
 
     async def send_messages(self, messages):
         for idx, message in enumerate(messages):
-
             if type(message) is not dict:
                 dict_message = message.get_data()
                 dict_message['chat_id'] = self.rep
-                await self.tg.send_action(message.get_method(), self.rep)
-                await self.tg.send_message(message.get_method(), dict_message)
 
-            else:
-                message['message']['chat_id'] = self.rep
-                await self.tg.send_action(message.get_method(), self.rep)
+                if self.log_id is None:
+                    self.log_id = 'SendMessage|%d' % int(time.time() * 1000)
+                await self.tg.send_message(message.get_method(), dict_message)
+                self.log_id = save_a_log_to_server({
+                    'log_id': self.log_id,
+                    'user_id': self.rep,
+                    'os': '',
+                    'application': 'telegram',
+                    'task_code': message.get_method(),
+                    'origin': 'webhook_server',
+                    'end': int(time.time() * 1000),
+                    'remark': '%d번째 브릭 메시지 보냈습니다.' % idx
+                })
+
+            # else:
+            #     message['message']['chat_id'] = self.rep
+            #     await self.tg.send_action(message.get_method(), self.rep)
 
     async def send_message(self, message):
-
         if type(message) is not dict:
             dict_message = message.get_data()
             dict_message['chat_id'] = self.rep
-            await self.tg.send_action(message.get_method(), self.rep)
+
+            if self.log_id is None:
+                self.log_id = 'SendMessage|%d' % int(time.time() * 1000)
             await self.tg.send_message(message.get_method(), dict_message)
+            self.log_id = save_a_log_to_server({
+                'log_id': self.log_id,
+                'user_id': self.rep,
+                'os': '',
+                'application': 'telegram',
+                'task_code': message.get_method(),
+                'origin': 'webhook_server',
+                'end': int(time.time() * 1000),
+                'remark': '단건 브릭 메시지 보냈습니다.'
+            })
         else:
             message['message']['chat_id'] = self.rep
-            await self.tg.send_action(message['method'], self.rep)
+            if self.log_id is None:
+                self.log_id = 'SendMessage|%d' % int(time.time() * 1000)
             await self.tg.send_message(message['method'], message['message'])
+            self.log_id = save_a_log_to_server({
+                'log_id': self.log_id,
+                'user_id': self.rep,
+                'os': '',
+                'application': 'telegram',
+                'task_code': message['method'],
+                'origin': 'webhook_server',
+                'end': int(time.time() * 1000),
+                'remark': '단건 브릭 메시지 보냈습니다.'
+            })
 
 
 class BrickInputMessage(object):
@@ -222,7 +286,6 @@ class BrickInputMessage(object):
 
 
 async def find_custom_brick(client, platform, brick_id, command, brick_data, msg_data, brick_config, log_id):
-
     if brick_config is not None:
         if brick_config.get(brick_id, False):
             brick_data['data'] = brick_config[brick_id]
@@ -239,7 +302,7 @@ async def find_custom_brick(client, platform, brick_id, command, brick_data, msg
     if brick:
         if platform == 'facebook':
             user_id = msg_data['sender']['id']
-            fb = BrickFacebookAPIClient(fb=client, rep=Recipient(recipient_id=user_id))
+            fb = BrickFacebookAPIClient(fb=client, rep=Recipient(recipient_id=user_id), log_id=log_id, user_id=user_id)
             brick_input = BrickInputMessage(fb=fb, platform=platform, rep=fb.rep, brick_data=brick_data, log_id=log_id,
                                             user_id=user_id)
             if brick is SendEmail:
@@ -250,7 +313,7 @@ async def find_custom_brick(client, platform, brick_id, command, brick_data, msg
 
         elif platform == 'telegram':
             user_id = msg_data['from']['id']
-            tg = BrickTelegramAPIClient(tg=client, rep=user_id)
+            tg = BrickTelegramAPIClient(tg=client, rep=user_id, log_id=log_id, user_id=user_id)
             brick_input = BrickInputMessage(fb=tg, platform=platform, rep=tg.rep, brick_data=brick_data, log_id=log_id,
                                             user_id=user_id)
 

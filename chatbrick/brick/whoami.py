@@ -3,6 +3,7 @@ import time
 import blueforge.apis.telegram as tg
 import requests
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
+from blueforge.apis.facebook import TemplateAttachment, Element, GenericTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +33,27 @@ class Who(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+            # send_message = [
+            #     Message(
+            #         attachment=ImageAttachment(
+            #             url=BRICK_DEFAULT_IMAGE
+            #         )
+            #     ),
+            #     Message(
+            #         text='Naver Developers에서 제공하는 "사진속 유명인 찾기 서비스"에요.'
+            #     )
+            # ]
             send_message = [
                 Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE
+                    attachment=TemplateAttachment(
+                        payload=GenericTemplate(
+                            elements=[
+                                Element(image_url=BRICK_DEFAULT_IMAGE,
+                                        title='사진속 유명인 찾기 서비스',
+                                        subtitle='Naver Developers에서 제공하는 "사진속 유명인 찾기 서비스"에요.')
+                            ]
+                        )
                     )
-                ),
-                Message(
-                    text='Naver Developers에서 제공하는 "사진속 유명인 찾기 서비스"에요.'
                 )
             ]
             await self.fb.send_messages(send_message)
@@ -47,18 +61,7 @@ class Who(object):
         elif command == 'final':
             input_data = await self.brick_db.get()
             contents = input_data['store'][0]['value']
-            start = int(time.time() * 1000)
             parsed_result = await Who.get_data(input_data['data'], contents)
-            requests.post('https://www.chatbrick.io/api/log/', data={
-                'brick_id': 'who',
-                'platform': 'facebook',
-                'start': start,
-                'end': int(time.time() * 1000),
-                'tag': '페이스북,네이버,API,누구냐넌',
-                'data': parsed_result,
-                'remark': '누구냐넌 네이버 API 호출'
-            })
-            logger.debug(parsed_result)
 
             if parsed_result.get('faces', False):
                 if len(parsed_result['faces']) == 0:
@@ -121,18 +124,7 @@ class Who(object):
             logger.info(self.fb.send_action('goSendMessage'))
             input_data = await self.brick_db.get()
             contents = input_data['store'][0]['value']
-            start = int(time.time() * 1000)
             parsed_result = await Who.get_data(input_data['data'], contents)
-            requests.post('https://www.chatbrick.io/api/log/', data={
-                'brick_id': 'who',
-                'platform': 'telegram',
-                'start': start,
-                'end': int(time.time() * 1000),
-                'tag': '텔레그램,네이버,API,누구냐넌',
-                'data': parsed_result,
-                'remark': '누구냐넌 네이버 API 호출'
-            })
-            logger.debug(parsed_result)
 
             if parsed_result.get('faces', False):
                 if len(parsed_result['faces']) == 0:

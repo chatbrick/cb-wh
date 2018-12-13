@@ -85,14 +85,46 @@ class Train(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+            # send_message = [
+            #     Message(
+            #         attachment=ImageAttachment(
+            #             url=BRICK_DEFAULT_IMAGE
+            #         )
+            #     ),
+            #     Message(
+            #         text='국토교통부에서 제공하는 "열차조회 서비스"에요. 코레일/SRT 모두 조회 가능해요.'
+            #     ),
+            #     Message(
+            #         attachment=TemplateAttachment(
+            #             payload=GenericTemplate(
+            #                 elements=[
+            #                     Element(
+            #                         image_url='https://www.chatbrick.io/api/static/brick/img_brick_01_002.png',
+            #                         title='열차조회',
+            #                         subtitle='코레일/SRT 모두 조회할 수 있어요',
+            #                         buttons=[
+            #                             PostBackButton(
+            #                                 title='조회하기',
+            #                                 payload='brick|train|show_data'
+            #                             )
+            #                         ]
+            #                     )
+            #                 ]
+            #             )
+            #         )
+            #     )
+            # ]
             send_message = [
                 Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE
+                    attachment=TemplateAttachment(
+                        payload=GenericTemplate(
+                            elements=[
+                                Element(image_url=BRICK_DEFAULT_IMAGE,
+                                        title='열차조회 서비스',
+                                        subtitle='국토교통부에서 제공하는 "열차조회 서비스"에요. 코레일/SRT 모두 조회 가능해요.')
+                            ]
+                        )
                     )
-                ),
-                Message(
-                    text='국토교통부에서 제공하는 "열차조회 서비스"에요. 코레일/SRT 모두 조회 가능해요.'
                 ),
                 Message(
                     attachment=TemplateAttachment(
@@ -123,7 +155,6 @@ class Train(object):
             destination_station = input_data['store'][1]['value'].strip()
             departure_date = input_data['store'][2]['value']
             train_type = input_data['store'][3]['value']
-            start = int(time.time() * 1000)
 
             if STATION.get(departure_station) is None:
                 send_message = [
@@ -160,15 +191,6 @@ class Train(object):
                         departure_date, train_type))
 
                 items = get_items_from_xml(res)
-                requests.post('https://www.chatbrick.io/api/log/', data={
-                    'brick_id': 'train',
-                    'platform': 'facebook',
-                    'start': start,
-                    'end': int(time.time() * 1000),
-                    'tag': '페이스북,철도,시간,조회,API',
-                    'data': items,
-                    'remark': '철도 시간표 조회 API 호출'
-                })
 
                 if type(items) is dict:
                     if items.get('code', '00') == '99' or items.get('code', '00') == '30':
@@ -252,6 +274,7 @@ class Train(object):
                 )
 
             ]
+
             await self.fb.send_messages(send_message)
         elif command == 'show_data':
             await self.brick_db.save()
@@ -261,7 +284,6 @@ class Train(object):
             destination_station = input_data['store'][1]['value'].strip()
             departure_date = input_data['store'][2]['value']
             train_type = input_data['store'][3]['value']
-            start = int(time.time() * 1000)
 
             if STATION.get(departure_station) is None:
                 send_message = [
@@ -302,17 +324,6 @@ class Train(object):
                         departure_date, train_type))
 
                 items = get_items_from_xml(res)
-
-
-                requests.post('https://www.chatbrick.io/api/log/', data={
-                    'brick_id': 'train',
-                    'platform': 'telegram',
-                    'start': start,
-                    'end': int(time.time() * 1000),
-                    'tag': '페이스북,철도,시간,조회,API',
-                    'data': items,
-                    'remark': '철도 시간표 조회 API 호출'
-                })
 
                 if type(items) is dict:
                     if items.get('code', '00') == '99' or items.get('code', '00') == '30':

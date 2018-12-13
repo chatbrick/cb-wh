@@ -49,14 +49,49 @@ class Tts(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+            # send_message = [
+            #     Message(
+            #         attachment=ImageAttachment(
+            #             url=BRICK_DEFAULT_IMAGE
+            #         )
+            #     ),
+            #     Message(
+            #         text='Naver Developers에서 제공하는 "입력한 키워드와 관련된 뉴스의 제목을 읽어주는 서비스"에요.'
+            #     ),
+            #     Message(
+            #         attachment=TemplateAttachment(
+            #             payload=GenericTemplate(
+            #                 elements=[
+            #                     Element(
+            #                         title='목소리선택',
+            #                         subtitle='뉴스제목을 읽어줄 목소리 선택해주세요.',
+            #                         buttons=[
+            #                             PostBackButton(
+            #                                 title='남성',
+            #                                 payload='brick|tts|jinho'
+            #                             ),
+            #                             PostBackButton(
+            #                                 title='여성',
+            #                                 payload='brick|tts|mijin'
+            #                             )
+            #                         ]
+            #                     )
+            #                 ]
+            #             )
+            #         )
+            #     )
+            # ]
             send_message = [
                 Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE
+                    attachment=TemplateAttachment(
+                        payload=GenericTemplate(
+                            elements=[
+                                Element(image_url=BRICK_DEFAULT_IMAGE,
+                                        title='입력한 키워드와 관련된 뉴스의 제목을 읽어주는 서비스',
+                                        subtitle='Naver Developers에서 제공하는 "입력한 키워드와 관련된 뉴스의 제목을 읽어주는 서비스"에요.')
+                            ]
+                        )
                     )
-                ),
-                Message(
-                    text='Naver Developers에서 제공하는 "입력한 키워드와 관련된 뉴스의 제목을 읽어주는 서비스"에요.'
                 ),
                 Message(
                     attachment=TemplateAttachment(
@@ -91,6 +126,7 @@ class Tts(object):
             sex = input_data['store'][1]['value']
 
             news_res = await Tts.get_news_data(input_data['data'], keyword)
+
             if 'errorCode' in news_res:
                 send_message = [
                     Message(
@@ -123,18 +159,8 @@ class Tts(object):
                         ]
                     ))
                     news_title.append(news_t)
-                start = int(time.time() * 1000)
                 mp3_url = await self.get_data(input_data['data'], sex, '0', '\n'.join(news_title))
-                logger.info(mp3_url)
-                requests.post('https://www.chatbrick.io/api/log/', data={
-                    'brick_id': 'tts',
-                    'platform': 'facebook',
-                    'start': start,
-                    'end': int(time.time() * 1000),
-                    'tag': '페이스북,네이버,API,대신말해줌',
-                    'data': mp3_url,
-                    'remark': '대신말해줌 네이버 API 호출'
-                })
+
                 send_message = [
                     Message(
                         text='뉴스를 녹음하고 있어요.\n잠시 기다려 주세요.'
@@ -202,6 +228,7 @@ class Tts(object):
             sex = input_data['store'][1]['value']
 
             news_res = await Tts.get_news_data(input_data['data'], keyword)
+
             if 'errorCode' in news_res:
                 send_message = [
                     tg.SendMessage(
@@ -220,25 +247,25 @@ class Tts(object):
                 ]
             else:
                 news_title = []
+                news_markdown = ''
 
                 for news in news_res['items']:
-                    news_title.append(news['title'].replace('<b>', '').replace('</b>', '').replace('&quot;', ''))
+                    news_t = news['title'].replace('<b>', '').replace('</b>', '').replace('&quot;', '').replace('[', '').replace(']', '')
+                    news_title.append(news_t)
+                    news_markdown += '%s\n%s\n%s\n\n' % (
+                        news_t, news['description'].replace('<b>', '').replace('</b>', '').replace('&quot;', ''),
+                        news['link'])
 
-                start = int(time.time() * 1000)
-                mp3_url = await Tts.get_data(input_data['data'], sex, '0', '\n'.join(news_title))
-                logger.info(mp3_url)
-                requests.post('https://www.chatbrick.io/api/log/', data={
-                    'brick_id': 'tts',
-                    'platform': 'telegram',
-                    'start': start,
-                    'end': int(time.time() * 1000),
-                    'tag': '텔레그램,네이버,API,대신말해줌',
-                    'data': mp3_url,
-                    'remark': '대신말해줌 네이버 API 호출'
-                })
+                mp3_url = await self.get_data(input_data['data'], sex, '0', '\n'.join(news_title))
+
+
                 send_message = [
                     tg.SendMessage(
                         text='뉴스를 녹음하고 있어요.\n잠시 기다려 주세요.'
+                    ),
+                    tg.SendMessage(
+                        text=news_markdown,
+                        disable_web_page_preview=True
                     ),
                     tg.SendAudio(
                         audio=mp3_url,

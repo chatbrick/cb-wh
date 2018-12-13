@@ -6,6 +6,8 @@ import datetime
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
 
 from chatbrick.util import get_items_from_xml, UNKNOWN_ERROR_MSG
+import time
+from blueforge.apis.facebook import TemplateAttachment, Element, GenericTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +32,27 @@ class PublicJobs(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+            # send_message = [
+            #     Message(
+            #         attachment=ImageAttachment(
+            #             url=BRICK_DEFAULT_IMAGE
+            #         )
+            #     ),
+            #     Message(
+            #         text='인사혁신처에서 제공하는 "공공취업정보검색 서비스"에요.'
+            #     )
+            # ]
             send_message = [
                 Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE
+                    attachment=TemplateAttachment(
+                        payload=GenericTemplate(
+                            elements=[
+                                Element(image_url=BRICK_DEFAULT_IMAGE,
+                                        title='공공취업정보검색 서비스',
+                                        subtitle='인사혁신처에서 제공하는 "공공취업정보검색 서비스"에요.')
+                            ]
+                        )
                     )
-                ),
-                Message(
-                    text='인사혁신처에서 제공하는 "공공취업정보검색 서비스"에요.'
                 )
             ]
             await self.fb.send_messages(send_message)
@@ -45,7 +60,6 @@ class PublicJobs(object):
             await self.facebook('final')
         elif command == 'final':
             input_data = await self.brick_db.get()
-
             res = await PublicJobs.get_data(input_data)
 
             items = get_items_from_xml(res)
@@ -121,9 +135,11 @@ class PublicJobs(object):
             input_data = await self.brick_db.get()
             to = datetime.datetime.today()
             today = '%d-%02d-%02d' % (to.year, to.month, to.day)
+
             res = requests.get(
                 url='http://openapi.mpm.go.kr/openapi/service/RetrievePblinsttEmpmnInfoService/getList?serviceKey=%s&pageNo=1&startPage=1&numOfRows=20&pageSize=20&Pblanc_ty=e01&Begin_de=%s&Sort_order=1' % (
                     input_data['data']['api_key'], today))
+
 
             items = get_items_from_xml(res)
 

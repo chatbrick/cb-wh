@@ -1,5 +1,5 @@
 import logging
-
+import time
 import blueforge.apis.telegram as tg
 import requests
 import datetime
@@ -9,6 +9,7 @@ from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickR
     Element, GenericTemplate, PostBackButton, ButtonTemplate
 
 from chatbrick.util import get_items_from_xml, UNKNOWN_ERROR_MSG
+from chatbrick.util import save_a_log_to_server
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +23,57 @@ class Holiday(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+            # send_message = [
+            #     Message(
+            #         attachment=ImageAttachment(
+            #             url=BRICK_DEFAULT_IMAGE
+            #         )
+            #     ),
+            #     Message(
+            #         text='한국천문연구원에서 제공하는 "쉬는날 조회 서비스"에요.'
+            #     ),
+            #     Message(
+            #         attachment=TemplateAttachment(
+            #             payload=GenericTemplate(
+            #                 elements=[
+            #                     Element(
+            #                         image_url='https://www.chatbrick.io/api/static/brick/img_brick_11_002.png',
+            #                         title='이번달에 쉬는날',
+            #                         subtitle='이번달에 공휴일을 알려드려요.',
+            #                         buttons=[
+            #                             PostBackButton(
+            #                                 title='이번달조회',
+            #                                 payload='brick|holiday|this_month'
+            #                             )
+            #                         ]
+            #                     ),
+            #                     Element(
+            #                         image_url='https://www.chatbrick.io/api/static/brick/img_brick_11_002.png',
+            #                         title='지정한 년/월에 쉬는날',
+            #                         subtitle='입력하신 년/월의 공휴일을 알려드려요.',
+            #                         buttons=[
+            #                             PostBackButton(
+            #                                 title='조회할 년/월 입력',
+            #                                 payload='brick|holiday|specify_month'
+            #                             )
+            #                         ]
+            #                     )
+            #                 ]
+            #             )
+            #         )
+            #     )
+            # ]
             send_message = [
                 Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE
+                    attachment=TemplateAttachment(
+                        payload=GenericTemplate(
+                            elements=[
+                                Element(image_url=BRICK_DEFAULT_IMAGE,
+                                        title='쉬는날 조회 서비스',
+                                        subtitle='한국천문연구원에서 제공하는 "쉬는날 조회 서비스"에요.')
+                            ]
+                        )
                     )
-                ),
-                Message(
-                    text='한국천문연구원에서 제공하는 "쉬는날 조회 서비스"에요.'
                 ),
                 Message(
                     attachment=TemplateAttachment(
@@ -97,12 +141,23 @@ class Holiday(object):
                             'store.1.value': str(month)
                         }
                 })
-                logger.info(rslt)
 
+            if self.fb.log_id is None:
+                self.fb.log_id = 'FBSendMessage|%d' % int(time.time() * 1000)
             res = requests.get(
                 url='http://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo?serviceKey=%s&solYear=%s&solMonth=%s' % (
                     input_data['data']['api_key'], year, str(month).rjust(2, '0')))
-
+            save_a_log_to_server({
+                'log_id': self.fb.log_id,
+                'user_id': self.fb.user_id,
+                'os': '',
+                'application': 'facebook',
+                'api_code': 'holiday',
+                'api_provider_code': 'chatbrick',
+                'origin': 'webhook_server',
+                'end': int(time.time() * 1000),
+                'remark': '쉬는날 조회 외부 API 요청을 보냄'
+            })
             items = get_items_from_xml(res)
 
             if type(items) is dict:
@@ -241,11 +296,23 @@ class Holiday(object):
                             'store.1.value': str(month)
                         }
                 })
-                logger.info(rslt)
 
+            if self.fb.log_id is None:
+                self.fb.log_id = 'SendMessage|%d' % int(time.time() * 1000)
             res = requests.get(
                 url='http://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo?serviceKey=%s&solYear=%s&solMonth=%s' % (
                     input_data['data']['api_key'], year, str(month).rjust(2, '0')))
+            save_a_log_to_server({
+                'log_id': self.fb.log_id,
+                'user_id': self.fb.user_id,
+                'os': '',
+                'application': 'telegram',
+                'api_code': 'holiday',
+                'api_provider_code': 'chatbrick',
+                'origin': 'webhook_server',
+                'end': int(time.time() * 1000),
+                'remark': '외부 휴일 조회 API 요청을 보냄'
+            })
 
             items = get_items_from_xml(res)
 
@@ -306,7 +373,6 @@ class Holiday(object):
                     sending_message = []
                     for item in items:
                         sending_message.append('*{locdate}*\n공휴일 유무: {isHoliday}\n공휴일 내용: {dateName}'.format(**item))
-
 
                     send_message = [
                         tg.SendMessage(

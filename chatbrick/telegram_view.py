@@ -4,11 +4,11 @@ import os
 import requests
 
 import time
+from .util import save_a_log_to_server
 from aiohttp import web
 from chatbrick.brick import find_custom_brick
 import traceback
 
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
@@ -45,7 +45,6 @@ async def telegram_post(request):
     try:
         if tg:
             chat = chat_data['chat']
-
             request.app.loop.create_task(tg_message_poc(tg, chat, data))
     except Exception as ex:
         logger.error(ex)
@@ -56,11 +55,9 @@ async def telegram_post(request):
 
 async def tg_message_poc(tg, chat, data):
     start = int(time.time() * 1000)
+    log_id = 'SendMessage|%d' % start
+    commands = {}
 
-    commands = {
-        'log_id': 'SendMessage%d' % start,
-        'user_id': None
-    }
     if 'message' in data:
         message = data['message']
         is_go = True
@@ -71,7 +68,7 @@ async def tg_message_poc(tg, chat, data):
                 command = message['text'][1:message['entities'][0]['length']]
                 commands['value'] = command
                 logger.info('Command: %s' % command)
-                await find_brick(tg, chat, message, 'bot_command', **commands)
+                await find_brick(tg, chat, message, 'bot_command', log_id, **commands)
 
         db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
         text_input = await db.message_store.find_one({'id': message['from']['id'],
@@ -106,16 +103,30 @@ async def tg_message_poc(tg, chat, data):
                         is_final = True
 
                 if is_final:
-                    await find_brick(tg, chat, message, None, brick=text_input['brick_id'], sub_command='final')
+                    await find_brick(tg, chat, message, None, log_id, brick=text_input['brick_id'], sub_command='final')
                 elif is_go_on:
                     action_message = text_input['store'][final_store_idx]['message']['message']
                     action_message['chat_id'] = message['from']['id']
+
+                    if log_id is None:
+                        log_id = 'SendMessage|%d' % int(time.time() * 1000)
                     logger.info(await tg.send_message(text_input['store'][final_store_idx]['message']['method'],
                                                       action_message))
+                    log_id = save_a_log_to_server({
+                        'log_id': log_id,
+                        'user_id': action_message['chat_id'],
+                        'os': '',
+                        'application': 'telegram',
+                        'task_code': text_input['store'][final_store_idx]['message']['method'],
+                        'origin': 'webhook_server',
+                        'end': int(time.time() * 1000),
+                        'remark': '메시지 보냈습니다.'
+
+                    })
 
                 if not is_go_on and not is_final:
                     commands['value'] = data['message']['text']
-                    await find_brick(tg, chat, message, 'text', **commands)
+                    await find_brick(tg, chat, message, 'text', log_id, **commands)
 
         elif 'photo' in data['message'] and is_go:
             logger.info('Photo!!')
@@ -134,9 +145,23 @@ async def tg_message_poc(tg, chat, data):
                             if last_photo.get('file_path', False):
                                 image_url = last_photo['file_path']
                             else:
+                                if log_id is None:
+                                    log_id = 'SendMessage|%d' % int(time.time() * 1000)
                                 parsed_file = await tg.send_message('getFile', {
                                     'file_id': data['message']['photo'][-2]['file_id']
                                 })
+                                log_id = save_a_log_to_server({
+                                    'log_id': log_id,
+                                    'user_id': message['from']['id'],
+                                    'os': '',
+                                    'application': 'telegram',
+                                    'task_code': text_input['store'][final_store_idx]['message']['method'],
+                                    'origin': 'webhook_server',
+                                    'end': int(time.time() * 1000),
+                                    'remark': '메시지 보냈습니다.'
+
+                                })
+
                                 logger.info(parsed_file)
                                 image_url = parsed_file['result']['file_path']
 
@@ -156,17 +181,31 @@ async def tg_message_poc(tg, chat, data):
                                 break
 
                 if is_final:
-                    await find_brick(tg, chat, message, None, brick=text_input['brick_id'], sub_command='final')
+                    await find_brick(tg, chat, message, None, log_id, brick=text_input['brick_id'], sub_command='final')
                 elif is_go_on:
                     action_message = text_input['store'][final_store_idx]['message']['message']
                     action_message['chat_id'] = message['from']['id']
+                    if log_id is None:
+                        log_id = 'SendMessage|%d' % int(time.time() * 1000)
                     logger.info(await tg.send_message(text_input['store'][final_store_idx]['message']['method'],
                                                       action_message))
+                    save_a_log_to_server({
+                        'log_id': log_id,
+                        'user_id': message['from']['id'],
+                        'os': '',
+                        'application': 'telegram',
+                        'task_code': text_input['store'][final_store_idx]['message']['method'],
+                        'origin': 'webhook_server',
+                        'end': int(time.time() * 1000),
+                        'remark': '메시지 보냈습니다.'
+
+                    })
 
         # if 'attatchments' in data['message'] and
 
     elif 'callback_query' in data:
         callback = data['callback_query']
+
         command = callback['data']
         logger.info('Command: %s' % command)
         if command.startswith('EDIT|'):
@@ -180,22 +219,10 @@ async def tg_message_poc(tg, chat, data):
             brick_type = 'bot_command'
         else:
             brick_type = 'callback'
-        await find_brick(tg, chat, callback, brick_type, **commands)
-
-    requests.put('https://www.chatbrick.io/api/log/', json={
-        'log_id': commands['log_id'],
-        'user_id': commands['user_id'],
-        'os': '',
-        'application': 'telegram',
-        'task_code': 'SendMessage',
-        'start': start,
-        'end': int(time.time() * 1000),
-        'remark': ''
-
-    })
+        await find_brick(tg, chat, callback, brick_type, log_id, **commands)
 
 
-async def find_brick(tg, chat, raw_message, brick_type, **kwargs):
+async def find_brick(tg, chat, raw_message, brick_type, log_id, **kwargs):
     logger.info(brick_type)
     logger.info(kwargs)
     brick_data = chat.get('brick_data', None)
@@ -204,7 +231,7 @@ async def find_brick(tg, chat, raw_message, brick_type, **kwargs):
         is_not_find = False
         await find_custom_brick(client=tg, platform='telegram', brick_id=kwargs['brick'],
                                 command=kwargs['sub_command'], brick_data={'id': kwargs['brick']},
-                                msg_data=raw_message, brick_config=brick_data, log_id=kwargs['log_id'])
+                                msg_data=raw_message, brick_config=brick_data, log_id=log_id)
     else:
         for brick in chat['telegram']['bricks']:
             if brick['type'] == brick_type and brick['value'] == kwargs['value']:
@@ -214,26 +241,69 @@ async def find_brick(tg, chat, raw_message, brick_type, **kwargs):
                     send_message = action['message']
                     send_message['chat_id'] = raw_message['from']['id']
                     send_message['message_id'] = raw_message['message']['message_id']
-                    await tg.send_action(action['method'], send_message['chat_id'])
+
+                    if log_id is None:
+                        log_id = 'SendMessage|%d' % int(time.time() * 1000)
                     logger.info(await tg.send_message(action['method'], send_message))
+                    log_id = save_a_log_to_server({
+                        'log_id': log_id,
+                        'user_id': raw_message['from']['id'],
+                        'os': '',
+                        'application': 'telegram',
+                        'task_code': action['method'],
+                        'origin': 'webhook_server',
+                        'end': int(time.time() * 1000),
+                        'remark': '메시지 보냈습니다.'
+
+                    })
                 else:
                     for action in brick['actions']:
                         if 'message' in action:
                             send_message = action['message']
                             send_message['chat_id'] = raw_message['from']['id']
-                            await tg.send_action(action['method'], send_message['chat_id'])
+                            logger.info(send_message)
+                            logger.info('log_id:: %s' % log_id)
+
+                            if log_id is None:
+                                log_id = 'SendMessage|%d' % int(time.time() * 1000)
+                            logger.info('log_id:: %s' % log_id)
                             logger.info(await tg.send_message(action['method'], send_message))
+                            log_id = save_a_log_to_server({
+                                'log_id': log_id,
+                                'user_id': raw_message['from']['id'],
+                                'os': '',
+                                'application': 'telegram',
+                                'task_code': action['method'],
+                                'origin': 'webhook_server',
+                                'end': int(time.time() * 1000),
+                                'remark': '메시지 보냈습니다.'
+
+                            })
+
                         elif 'brick' in action:
                             logger.info(
                                 await find_custom_brick(client=tg, platform='telegram',
                                                         brick_id=action['brick']['id'],
                                                         command='get_started', brick_data=action['brick'],
                                                         msg_data=raw_message, brick_config=brick_data,
-                                                        log_id=kwargs['log_id']))
+                                                        log_id=log_id))
 
     if is_not_find:
         send_message = {
             'chat_id': raw_message['from']['id'],
             'text': chat['settings']['data']['custom_settings'].get('error_msg', '알수가 없네요.')
         }
+        if log_id is None:
+            log_id = 'SendMessage|%d' % int(time.time() * 1000)
         await tg.send_message('sendMessage', send_message)
+        save_a_log_to_server({
+            'log_id': log_id,
+            'user_id': raw_message['from']['id'],
+            'os': '',
+            'application': 'telegram',
+            'task_code': 'sendMessage',
+            'origin': 'webhook_server',
+            'end': int(time.time() * 1000),
+            'remark': '메시지 보냈습니다.'
+
+        })

@@ -6,6 +6,7 @@ from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickR
     GenericTemplate, Element, PostBackButton
 
 from chatbrick.util import get_items_from_xml, UNKNOWN_ERROR_MSG
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +27,57 @@ class Icn(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+        #     send_message = [
+        #         Message(
+        #             attachment=ImageAttachment(
+        #                 url=BRICK_DEFAULT_IMAGE
+        #             )
+        #         ),
+        #         Message(
+        #             text='인천국제공항공사에서 제공하는 "출국장 대기인원 조회 서비스"에요.'
+        #         ),
+        #         Message(
+        #             attachment=TemplateAttachment(
+        #                 payload=GenericTemplate(
+        #                     elements=[
+        #                         Element(
+        #                             image_url='https://www.chatbrick.io/api/static/brick/img_brick_13_002.png',
+        #                             title='제 1여객터미널',
+        #                             subtitle='제 1여객터미널의 게이트별 대기인원을 알려드려요.',
+        #                             buttons=[
+        #                                 PostBackButton(
+        #                                     title='1여객터미널 조회',
+        #                                     payload='brick|icn|1'
+        #                                 )
+        #                             ]
+        #                         ),
+        #                         Element(
+        #                             image_url='https://www.chatbrick.io/api/static/brick/img_brick_13_002.png',
+        #                             title='제 2여객터미널',
+        #                             subtitle='제 2여객터미널의 게이트별 대기인원을 알려드려요.',
+        #                             buttons=[
+        #                                 PostBackButton(
+        #                                     title='2여객터미널 조회',
+        #                                     payload='brick|icn|2'
+        #                                 )
+        #                             ]
+        #                         )
+        #                     ]
+        #                 )
+        #             )
+        #         )
+        #     ]
             send_message = [
                 Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE
+                    attachment=TemplateAttachment(
+                        payload=GenericTemplate(
+                            elements=[
+                                Element(image_url=BRICK_DEFAULT_IMAGE,
+                                        title='출국장 대기인원 조회 서비스',
+                                        subtitle='인천국제공항공사에서 제공하는 "출국장 대기인원 조회 서비스"에요.')
+                            ]
+                        )
                     )
-                ),
-                Message(
-                    text='인천국제공항공사에서 제공하는 "출국장 대기인원 조회 서비스"에요.'
                 ),
                 Message(
                     attachment=TemplateAttachment(
@@ -70,6 +114,7 @@ class Icn(object):
             await self.brick_db.save()
         elif command == '1' or command == '2':
             input_data = await self.brick_db.get()
+
             res = requests.get(
                 url='http://openapi.airport.kr/openapi/service/StatusOfDepartures/getDeparturesCongestion?serviceKey=%s&terno=%s' % (
                     input_data['data']['api_key'], command), headers={
@@ -158,6 +203,7 @@ class Icn(object):
             await self.brick_db.save()
         elif command == '1' or command == '2':
             input_data = await self.brick_db.get()
+
             res = requests.get(
                 url='http://openapi.airport.kr/openapi/service/StatusOfDepartures/getDeparturesCongestion?serviceKey=%s&terno=%s' % (
                     input_data['data']['api_key'], command), headers={

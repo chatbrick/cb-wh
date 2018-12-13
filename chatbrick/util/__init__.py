@@ -74,7 +74,7 @@ def remove_html_tag(raw_html):
 
 
 def download_and_save_image(url):
-    res = requests.get(url)
+    res = requests.get(url, timeout=100)
     file_name = res.headers['Content-Disposition'].split(sep='=')[-1].strip()
     with open(DEFAULT_IMAGE_FOLDER + file_name, 'wb') as file:
         file.write(res.content)
@@ -87,3 +87,51 @@ def save_voice(response):
         file.write(response.content)
 
     return DEFAULT_IMAGE_URL + file_name
+
+
+def save_a_log_to_server(log_data):
+    try:
+        if log_data['log_id'] is not None:
+            _, log_data['start'] = log_data['log_id'].split(sep='|')
+            requests.put('https://www.chatbrick.io/api/log_new/', json=log_data)
+            return None
+    except Exception as ex:
+        logger.error(ex)
+
+    return log_data['log_id']
+
+
+def detect_log_type(log_data):
+    if type(log_data) is not dict:
+        log_data = log_data.get_data()
+
+    try:
+        print(log_data)
+        if 'message' in log_data:
+            log_data = log_data['message']
+
+        if 'text' in log_data:
+            return 'facebook_text'
+        elif 'attachment' in log_data:
+            log_data = log_data['attachment']
+            if log_data['type'] == 'template':
+                template_type = log_data['payload']['template_type']
+                if template_type == 'generic':
+                    return 'facebook_generic'
+                elif template_type == 'list':
+                    return 'facebook_list'
+                elif template_type == 'button':
+                    return 'facebook_textbtn'
+                else:
+                    return 'UNKNOWN_TEMPLATE'
+            elif log_data['type'] == 'image':
+                return 'facebook_image'
+            elif log_data['type'] == 'audio':
+                return 'facebook_audio'
+            else:
+                return 'UNKNOWN_ATTACHMENT'
+        else:
+            return 'UNKNOWN'
+    except Exception as ex:
+        logger.error(ex)
+    return 'FAILED_TO_DETECT_MESSAGE_TYPE'

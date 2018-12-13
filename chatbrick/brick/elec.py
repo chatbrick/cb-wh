@@ -5,6 +5,8 @@ import requests
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
 
 from chatbrick.util import get_items_from_xml, UNKNOWN_ERROR_MSG
+import time
+from blueforge.apis.facebook import TemplateAttachment, Element, GenericTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -18,14 +20,27 @@ class Electric(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+            # send_message = [
+            #     Message(
+            #         attachment=ImageAttachment(
+            #             url=BRICK_DEFAULT_IMAGE
+            #         )
+            #     ),
+            #     Message(
+            #         text='한국전력공사에서 제공하는 "전기차충전소 조회 서비스"에요.'
+            #     )
+            # ]
             send_message = [
                 Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE
+                    attachment=TemplateAttachment(
+                        payload=GenericTemplate(
+                            elements=[
+                                Element(image_url=BRICK_DEFAULT_IMAGE,
+                                        title='전기차충전소 조회 서비스',
+                                        subtitle='한국전력공사에서 제공하는 "전기차충전소 조회 서비스"에요.')
+                            ]
+                        )
                     )
-                ),
-                Message(
-                    text='한국전력공사에서 제공하는 "전기차충전소 조회 서비스"에요.'
                 )
             ]
             await self.fb.send_messages(send_message)
@@ -33,10 +48,10 @@ class Electric(object):
         elif command == 'final':
             input_data = await self.brick_db.get()
             place = input_data['store'][0]['value']
+
             res = requests.get(
                 url='http://openapi.kepco.co.kr/service/evInfoService/getEvSearchList?serviceKey=%s&numOfRows=100&pageSize=100&pageNo=1&startPage=1&addr=%s' % (
                     input_data['data']['api_key'], urllib.parse.quote_plus(place)))
-
             items = get_items_from_xml(res)
 
             if type(items) is dict:
@@ -107,6 +122,7 @@ class Electric(object):
         elif command == 'final':
             input_data = await self.brick_db.get()
             place = input_data['store'][0]['value']
+
             res = requests.get(
                 url='http://openapi.kepco.co.kr/service/evInfoService/getEvSearchList?serviceKey=%s&numOfRows=100&pageSize=100&pageNo=1&startPage=1&addr=%s' % (
                     input_data['data']['api_key'], urllib.parse.quote_plus(place)))

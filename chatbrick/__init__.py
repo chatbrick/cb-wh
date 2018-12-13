@@ -6,13 +6,13 @@ import requests
 import os
 import time
 
-from blueforge.apis.facebook import CreateFacebookApiClient
+from .view import CreateFacebookApiClient
 from bson.json_util import dumps
 from aiohttp import web
 from chatbrick.routes import setup_routes
 
 logger = logging.getLogger('aiohttp.access')
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 
 class CreateTelegramApiClient(object):
@@ -84,10 +84,10 @@ async def setup_db():
             page_data[chat['page_id']] = chat['id']
 
         if chat.get('access_token', False):
-            for menu in chat['persistent_menu']:
-                await send_message_profile(chat['access_token'], {'whitelisted_domains': menu['whitelisted_domains']})
-
-            await send_message_profile(chat['access_token'], chat['persistent_menu'][0])
+            # for menu in chat['persistent_menu']:
+            #     await send_message_profile(chat['access_token'], {'whitelisted_domains': menu['whitelisted_domains']})
+            #
+            # await send_message_profile(chat['access_token'], chat['persistent_menu'][0])
 
             formed_chat['fb'] = CreateFacebookApiClient(access_token=chat['access_token'])
 

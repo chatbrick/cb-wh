@@ -4,6 +4,8 @@ import blueforge.apis.telegram as tg
 import requests
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
 from watson_developer_cloud import PersonalityInsightsV3
+import time
+from blueforge.apis.facebook import TemplateAttachment, Element, GenericTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -27,14 +29,27 @@ class PersonalityInsight(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+            # send_message = [
+            #     Message(
+            #         attachment=ImageAttachment(
+            #             url=BRICK_DEFAULT_IMAGE
+            #         )
+            #     ),
+            #     Message(
+            #         text='IBM Bluemix에서 제공하는 "자소서를 분석해주는 서비스"에요.'
+            #     )
+            # ]
             send_message = [
                 Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE
+                    attachment=TemplateAttachment(
+                        payload=GenericTemplate(
+                            elements=[
+                                Element(image_url=BRICK_DEFAULT_IMAGE,
+                                        title='자소서를 분석해주는 서비스',
+                                        subtitle='IBM Bluemix에서 제공하는 "자소서를 분석해주는 서비스"에요.')
+                            ]
+                        )
                     )
-                ),
-                Message(
-                    text='IBM Bluemix에서 제공하는 "자소서를 분석해주는 서비스"에요.'
                 )
             ]
             await self.fb.send_messages(send_message)
@@ -42,34 +57,42 @@ class PersonalityInsight(object):
         elif command == 'final':
             input_data = await self.brick_db.get()
             contents = input_data['store'][0]['value']
-            parsed_result = await PersonalityInsight.get_data(input_data['data'], contents)
-            sending_message = '두구두구!\n자소서에 분석결과\n\n총 단어수 {word_count}\n'.format(
-                word_count=parsed_result.get('word_count', '0'))
 
-            for item in parsed_result.get('personality', [])[:5]:
-                sending_message += '{name} : {percentile}\n'.format(**item)
+            try:
+                parsed_result = await PersonalityInsight.get_data(input_data['data'], contents)
 
-            sending_message += '\n'
+                sending_message = '두구두구!\n자소서에 분석결과\n\n총 단어수 {word_count}\n'.format(
+                    word_count=parsed_result.get('word_count', '0'))
 
-            for item in parsed_result.get('warnings', []):
-                sending_message += '\n{warning_id}\n{message}\n'.format(**item)
+                for item in parsed_result.get('personality', [])[:5]:
+                    sending_message += '{name} : {percentile}\n'.format(**item)
 
-            send_message = [
-                Message(
-                    text='조회된 결과에요.'
-                ),
-                Message(
-                    text=sending_message,
-                    quick_replies=QuickReply(
-                        quick_reply_items=[
-                            QuickReplyTextItem(
-                                title='다른 자소서분석',
-                                payload='brick|personality|get_started'
-                            )
-                        ]
+                sending_message += '\n'
+
+                for item in parsed_result.get('warnings', []):
+                    sending_message += '\n{warning_id}\n{message}\n'.format(**item)
+
+                send_message = [
+                    Message(
+                        text='조회된 결과에요.'
+                    ),
+                    Message(
+                        text=sending_message,
+                        quick_replies=QuickReply(
+                            quick_reply_items=[
+                                QuickReplyTextItem(
+                                    title='다른 자소서분석',
+                                    payload='brick|personality|get_started'
+                                )
+                            ]
+                        )
                     )
-                )
-            ]
+                ]
+            except Exception as ex:
+                send_message = [
+                    Message(
+                        text='에러가 발생했습니다.\n최소 100단어 이상인 자소서 글을 입력하시거나 잠시 후에 다시 시도해주세요.\n\n에러 메시지: %s' % str(ex)
+                    )]
 
             await self.fb.send_messages(send_message)
             await self.brick_db.delete()
@@ -91,17 +114,22 @@ class PersonalityInsight(object):
         elif command == 'final':
             input_data = await self.brick_db.get()
             contents = input_data['store'][0]['value']
-            parsed_result = await PersonalityInsight.get_data(input_data['data'], contents)
-            sending_message = '두구두구!\n자소서에 분석결과\n\n총 단어수 {word_count}\n'.format(
-                word_count=parsed_result.get('word_count', '0'))
 
-            for item in parsed_result.get('personality', [])[:5]:
-                sending_message += '{name} : {percentile}\n'.format(**item)
+            try:
+                parsed_result = await PersonalityInsight.get_data(input_data['data'], contents)
+                sending_message = '두구두구!\n자소서에 분석결과\n\n총 단어수 {word_count}\n'.format(
+                    word_count=parsed_result.get('word_count', '0'))
 
-            sending_message += '\n'
+                for item in parsed_result.get('personality', [])[:5]:
+                    sending_message += '{name} : {percentile}\n'.format(**item)
 
-            for item in parsed_result.get('warnings', []):
-                sending_message += '\n{warning_id}\n{message}\n'.format(**item)
+                sending_message += '\n'
+
+                for item in parsed_result.get('warnings', []):
+                    sending_message += '\n{warning_id}\n{message}\n'.format(**item)
+
+            except Exception as ex:
+                sending_message = '에러가 발생했습니다.\n최소 100단어 이상인 자소서 글을 입력하시거나 잠시 후에 다시 시도해주세요.\n\n에러 메시지: %s' % str(ex)
 
             await self.fb.send_message(
                 tg.SendMessage(

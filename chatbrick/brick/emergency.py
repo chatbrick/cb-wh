@@ -5,6 +5,8 @@ import requests
 from blueforge.apis.facebook import Message, ImageAttachment, QuickReply, QuickReplyTextItem
 
 from chatbrick.util import get_items_from_xml, UNKNOWN_ERROR_MSG
+import time
+from blueforge.apis.facebook import TemplateAttachment, Element, GenericTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -18,14 +20,27 @@ class Emergency(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+            # send_message = [
+            #     Message(
+            #         attachment=ImageAttachment(
+            #             url=BRICK_DEFAULT_IMAGE
+            #         )
+            #     ),
+            #     Message(
+            #         text='중앙응급의료센터에서 제공하는 "응급실검색 서비스"에요.'
+            #     )
+            # ]
             send_message = [
                 Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE
+                    attachment=TemplateAttachment(
+                        payload=GenericTemplate(
+                            elements=[
+                                Element(image_url=BRICK_DEFAULT_IMAGE,
+                                        title='응급실검색 서비스',
+                                        subtitle='중앙응급의료센터에서 제공하는 "응급실검색 서비스"에요.')
+                            ]
+                        )
                     )
-                ),
-                Message(
-                    text='중앙응급의료센터에서 제공하는 "응급실검색 서비스"에요.'
                 )
             ]
             await self.fb.send_messages(send_message)
@@ -34,10 +49,10 @@ class Emergency(object):
             input_data = await self.brick_db.get()
             state = input_data['store'][0]['value']
             town = input_data['store'][1]['value']
+
             res = requests.get(
                 url='http://apis.data.go.kr/B552657/ErmctInfoInqireService/getEgytListInfoInqire?serviceKey=%s&Q0=%s&Q1=%s&ORD=NAME&pageNo=1&startPage=1&numOfRows=3&pageSize=3' % (
                     input_data['data']['api_key'], state, town))
-
             items = get_items_from_xml(res)
 
             if type(items) is dict:
@@ -115,6 +130,8 @@ class Emergency(object):
             input_data = await self.brick_db.get()
             state = input_data['store'][0]['value']
             town = input_data['store'][1]['value']
+
+
             res = requests.get(
                 url='http://apis.data.go.kr/B552657/ErmctInfoInqireService/getEgytListInfoInqire?serviceKey=%s&Q0=%s&Q1=%s&ORD=NAME&pageNo=1&startPage=1&numOfRows=3&pageSize=3' % (
                     input_data['data']['api_key'], state, town))
