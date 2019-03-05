@@ -1,18 +1,19 @@
 import requests
-import smtplib
+import time
 import logging
 import os
+import smtplib
+from email.mime.text import MIMEText
 
+import blueforge.apis.telegram as tg
 from blueforge.apis.facebook import Message, GenericTemplate, TemplateAttachment, ImageAttachment, PostBackButton, \
     Element, QuickReply, QuickReplyTextItem
-from email.mime.text import MIMEText
+from chatbrick.util import save_a_log_to_server
 
 logger = logging.getLogger(__name__)
 
-BRICK_DEFAULT_IMAGE = [
-    'https://www.chatbrick.io/api/static/img_brick_02_slide.png',
-    'https://www.chatbrick.io/api/static/img_brick_01_slide.png'
-]
+BRICK_DEFAULT_IMAGE = 'https://www.chatbrick.io/api/static/brick/img_brick_03_001.png'
+BRICK_GENERIC_TEMPLATE_IMAGE = 'https://www.chatbrick.io/api/static/brick/img_brick_03_002.png'
 
 
 class Mailer(object):
@@ -28,14 +29,44 @@ class Mailer(object):
 
     async def facebook(self, command):
         if command == 'get_started':
+            # send_message = [
+            #     Message(
+            #         attachment=ImageAttachment(
+            #             url=BRICK_DEFAULT_IMAGE
+            #         )
+            #     ),
+            #     Message(
+            #         text='블루핵에서 제공하는 "메일보내기 서비스"예요.'
+            #     ),
+            #     Message(
+            #         attachment=TemplateAttachment(
+            #             payload=GenericTemplate(
+            #                 elements=[
+            #                     Element(title='메일전송',
+            #                             subtitle='챗봇에서 메일을 보낼 수 있어요',
+            #                             image_url=BRICK_GENERIC_TEMPLATE_IMAGE,
+            #                             buttons=[
+            #                                 PostBackButton(
+            #                                     title='메일보내기',
+            #                                     payload='brick|mailer|show_data'
+            #                                 )
+            #                             ])
+            #                 ]
+            #             )
+            #         )
+            #     )
+            # ]
             send_message = [
                 Message(
-                    attachment=ImageAttachment(
-                        url=BRICK_DEFAULT_IMAGE[1]
+                    attachment=TemplateAttachment(
+                        payload=GenericTemplate(
+                            elements=[
+                                Element(image_url=BRICK_DEFAULT_IMAGE,
+                                        title='메일보내기 서비스',
+                                        subtitle='블루핵에서 제공하는 "메일보내기 서비스"예요.')
+                            ]
+                        )
                     )
-                ),
-                Message(
-                    text='블루핵에서 제공하는 "메일보내기 서비스"예요.'
                 ),
                 Message(
                     attachment=TemplateAttachment(
@@ -43,6 +74,7 @@ class Mailer(object):
                             elements=[
                                 Element(title='메일전송',
                                         subtitle='챗봇에서 메일을 보낼 수 있어요',
+                                        image_url=BRICK_GENERIC_TEMPLATE_IMAGE,
                                         buttons=[
                                             PostBackButton(
                                                 title='메일보내기',
@@ -76,13 +108,31 @@ class Mailer(object):
             msg = MIMEText(input_data['store'][2]['value'])
             msg['Subject'] = '%s로부터 이메일입니다.' % input_data['store'][0]['value']
             msg['To'] = input_data['store'][1]['value']
-            self.smtp.ehlo()
-            self.smtp.starttls()
-            self.smtp.login(self.sender_email, self.sender_password)
-            self.smtp.sendmail(self.sender_email, input_data['store'][1]['value'], msg.as_string())
+            result = '메일 보내기가 완료되었어요.'
+            if self.fb.log_id is None:
+                self.fb.log_id = 'FBSendMessage|%d' % int(time.time() * 1000)
+            try:
+                self.smtp.ehlo()
+                self.smtp.starttls()
+                self.smtp.login(self.sender_email, self.sender_password)
+                self.smtp.sendmail(self.sender_email, input_data['store'][1]['value'], msg.as_string())
+            except:
+                result = '메일 전송을 실패했습니다.\n잠시 후 다시 시도해주세요.'
+            save_a_log_to_server({
+                'log_id': self.fb.log_id,
+                'user_id': self.fb.user_id,
+                'os': '',
+                'application': 'facebook',
+                'api_code': 'mail',
+                'api_provider_code': 'chatbrick',
+                'origin': 'webhook_server',
+                'end': int(time.time() * 1000),
+                'remark': 'SMTP 통신으로 이메일 전송함'
+            })
+
             await self.fb.send_message(
                 message=Message(
-                    text='메일 보내기가 완료되었어요.',
+                    text=result,
                     quick_replies=QuickReply(
                         quick_reply_items=[
                             QuickReplyTextItem(
@@ -93,8 +143,93 @@ class Mailer(object):
                     )
                 ))
 
+            await self.brick_db.delete()
         return None
 
-    def telegram(self, sender):
+    async def telegram(self, command):
+        if command == 'get_started':
+            send_message = [
+                tg.SendPhoto(
+                    photo=BRICK_DEFAULT_IMAGE
+                ),
+                tg.SendMessage(
+                    text='블루핵에서 제공하는 "메일보내기 서비스"예요.',
+                    reply_markup=tg.MarkUpContainer(
+                        inline_keyboard=[
+                            [
+                                tg.CallbackButton(
+                                    text='메일 보내기',
+                                    callback_data='BRICK|mailer|show_data'
+                                )
+                            ]
+                        ]
+                    )
+                )
 
+            ]
+            await self.fb.send_messages(send_message)
+        elif command == 'show_data':
+            await self.brick_db.save()
+        elif command == 'cancel':
+            await self.brick_db.delete()
+            await self.fb.send_message(
+                tg.SendMessage(
+                    text='메일보내기를 취소했습니다.',
+                    reply_markup=tg.MarkUpContainer(
+                        inline_keyboard=[
+                            [
+                                tg.CallbackButton(
+                                    text='메일 보내기',
+                                    callback_data='BRICK|mailer|show_data'
+                                )
+                            ]
+                        ]
+                    )
+                )
+            )
+        elif command == 'final':
+            input_data = await self.brick_db.get()
+            msg = MIMEText(input_data['store'][2]['value'])
+            msg['Subject'] = '%s로부터 이메일입니다.' % input_data['store'][0]['value']
+            msg['To'] = input_data['store'][1]['value']
+            result = '메일 보내기가 완료되었어요.'
+
+            if self.fb.log_id is None:
+                self.fb.log_id = 'SendMessage|%d' % int(time.time() * 1000)
+            try:
+                self.smtp.ehlo()
+                self.smtp.starttls()
+                self.smtp.login(self.sender_email, self.sender_password)
+                self.smtp.sendmail(self.sender_email, input_data['store'][1]['value'], msg.as_string())
+            except:
+                result = '메일 전송을 실패했습니다.\n잠시 후 다시 시도해주세요.'
+
+            save_a_log_to_server({
+                'log_id': self.fb.log_id,
+                'user_id': self.fb.user_id,
+                'os': '',
+                'application': 'telegram',
+                'api_code': 'mail',
+                'api_provider_code': 'chatbrick',
+                'origin': 'webhook_server',
+                'end': int(time.time() * 1000),
+                'remark': 'SMTP 통신으로 이메일 전송함'
+            })
+
+            await self.fb.send_message(
+                tg.SendMessage(
+                    text=result,
+                    reply_markup=tg.MarkUpContainer(
+                        inline_keyboard=[
+                            [
+                                tg.CallbackButton(
+                                    text='연속하여 메일보내기',
+                                    callback_data='BRICK|mailer|show_data'
+                                )
+                            ]
+                        ]
+                    )
+                )
+            )
+            await self.brick_db.delete()
         return None

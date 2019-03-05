@@ -4,26 +4,56 @@ import json
 import logging
 import requests
 import os
+import time
 
-from blueforge.apis.facebook import CreateFacebookApiClient
+from .view import CreateFacebookApiClient
 from bson.json_util import dumps
 from aiohttp import web
 from chatbrick.routes import setup_routes
 
 logger = logging.getLogger('aiohttp.access')
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
+os.environ['DB_CONFIG'] = 'PLEASE_CHECK_HERE: https://bluehack.atlassian.net/browse/CB-201'
 
 class CreateTelegramApiClient(object):
     def __init__(self, token):
         self.token = token
 
+    async def send_action(self, method, chat_id):
+        action = None
+        if method is not None:
+            if method == 'sendPhoto':
+                action = 'upload_photo'
+            elif method == 'goSendMessage':
+                action = 'typing'
+            elif method == 'sendAudio':
+                action = 'upload_audio'
+            elif method == 'sendVideo':
+                action = 'upload_video'
+            elif method == 'sendDocument':
+                action = 'upload_document'
+            elif method == 'sendVideoNote':
+                action = 'record_video_note'
+            # elif method == 'sendLocation':
+            #     action = 'find_location'
+
+            if action is not None:
+                req = requests.post(url='https://api.telegram.org/bot%s/sendChatAction' % self.token,
+                                    data=json.dumps({
+                                        'chat_id': chat_id,
+                                        'action': action
+                                    }),
+                                    headers={'Content-Type': 'application/json'},
+                                    timeout=10)
+
+                logger.debug(req.json())
+
     async def send_message(self, method, message):
         req = requests.post(url='https://api.telegram.org/bot%s/%s' % (self.token, method),
                             data=json.dumps(message),
                             headers={'Content-Type': 'application/json'},
-                            timeout=5)
-
+                            timeout=100)
         return req.json()
 
     @property
@@ -41,8 +71,7 @@ async def send_message_profile(access_token, send_message):
 
 
 async def setup_db():
-
-    db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
+    db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).facebook
     chats = await db.facebook.find({}).to_list(length=1000)
     page_data = {}
     chat_data = {}
@@ -56,10 +85,10 @@ async def setup_db():
             page_data[chat['page_id']] = chat['id']
 
         if chat.get('access_token', False):
-            for menu in chat['persistent_menu']:
-                await send_message_profile(chat['access_token'], {'whitelisted_domains': menu['whitelisted_domains']})
-
-            await send_message_profile(chat['access_token'], chat['persistent_menu'][0])
+            # for menu in chat['persistent_menu']:
+            #     await send_message_profile(chat['access_token'], {'whitelisted_domains': menu['whitelisted_domains']})
+            #
+            # await send_message_profile(chat['access_token'], chat['persistent_menu'][0])
 
             formed_chat['fb'] = CreateFacebookApiClient(access_token=chat['access_token'])
 
