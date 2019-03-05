@@ -70,7 +70,7 @@ async def tg_message_poc(tg, chat, data):
                 logger.info('Command: %s' % command)
                 await find_brick(tg, chat, message, 'bot_command', log_id, **commands)
 
-        db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
+        db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).facebook
         text_input = await db.message_store.find_one({'id': message['from']['id'],
                                                       'platform': 'telegram'})
         if 'text' in data['message'] and is_go:

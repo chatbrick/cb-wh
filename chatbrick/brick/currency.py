@@ -161,7 +161,6 @@ class Currency(object):
             currency = input_data['store'][0]['value']
 
             rslt = await Currency.get_data(input_data['data']['api_key'])
-
             if len(rslt) == 0:
                 send_message = [
                     tg.SendMessage(

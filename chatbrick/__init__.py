@@ -14,6 +14,7 @@ from chatbrick.routes import setup_routes
 logger = logging.getLogger('aiohttp.access')
 logging.basicConfig(level=logging.INFO)
 
+os.environ['DB_CONFIG'] = 'PLEASE_CHECK_HERE: https://bluehack.atlassian.net/browse/CB-201'
 
 class CreateTelegramApiClient(object):
     def __init__(self, token):
@@ -70,7 +71,7 @@ async def send_message_profile(access_token, send_message):
 
 
 async def setup_db():
-    db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
+    db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).facebook
     chats = await db.facebook.find({}).to_list(length=1000)
     page_data = {}
     chat_data = {}

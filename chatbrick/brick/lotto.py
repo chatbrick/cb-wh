@@ -99,7 +99,7 @@ class Lotto(object):
 
             if self.fb.log_id is None:
                 self.fb.log_id = 'SendMessage|%d' % int(time.time() * 1000)
-            res = requests.get(url='http://www.nlotto.co.kr/common.do?method=getLottoNumber&drwNo=%s' % num)
+            res = requests.get(url='http://www.nlotto.co.kr/common.do?method=getLottoNumber&drwNo=%s' % num, verify=False)
             save_a_log_to_server({
                 'log_id': self.fb.log_id,
                 'user_id': self.fb.user_id,

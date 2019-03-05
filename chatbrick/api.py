@@ -23,7 +23,7 @@ async def telegram_chatbot(request, api, telegram_token, name):
         })
 
     if name:
-        db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
+        db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).facebook
         chat = await db.facebook.find_one({'id': name})
 
         formed_chat = None
@@ -51,6 +51,7 @@ async def telegram_chatbot(request, api, telegram_token, name):
 
 
 async def request_api(request):
+    print(request)
     api = request.match_info.get('api', None)
     brick_id = request.query.get('brick_id')
 

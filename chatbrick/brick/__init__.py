@@ -33,7 +33,8 @@ from .train import Train
 from .tts import Tts
 from .whoami import Who
 
-FILE_DIR = '/home/ec2-user/app/chatbrick_main/src'
+# FILE_DIR = '/home/ec2-user/app/chatbrick_main/src'
+FILE_DIR = '/home/ec2-user/app/cb-wh'
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +183,7 @@ class BrickTelegramAPIClient(object):
 
 class BrickInputMessage(object):
     def __init__(self, platform, fb, rep, brick_data, log_id, user_id=None):
-        self.db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
+        self.db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).facebook
         self.platform = platform
         self.brick_data = brick_data
         self.fb = fb

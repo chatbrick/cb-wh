@@ -126,7 +126,7 @@ async def refresh_post_async(request):
     name = request.match_info.get('name', None)
 
     if name:
-        db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
+        db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).facebook
         chat = await db.facebook.find_one({'id': name})
 
         formed_chat = None
@@ -194,7 +194,7 @@ async def fb_message_poc(chat, fb, entry):
             if 'postback' in messaging:
                 await find_brick(fb, chat, messaging, rep, 'postback', messaging['postback']['payload'], log_id)
             elif 'message' in messaging:
-                db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).chatbrick
+                db = motor.motor_asyncio.AsyncIOMotorClient(os.environ['DB_CONFIG']).facebook
                 text_input = await db.message_store.find_one({'id': rep.recipient_id,
                                                               'platform': 'facebook'})
                 is_not_find = True
